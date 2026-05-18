@@ -1,0 +1,27 @@
+{
+  "name": "agentic-engineering-max",
+  "description": "Plan, build, review: a multi-agent engineering toolkit for Claude Code projects. Ships a scientific-method plan interviewer, a 3-department implementation system (PM + worker + reviewer with atomic task claiming), an 8-stance epistemic review panel, and state-surface discipline (auto-written plan-state.md + README mirror + pre-commit + drift hooks).",
+  "owner": {
+    "name": "GhostlyGawd",
+    "email": "rhenmcleod@gmail.com"
+  },
+  "plugins": [
+    {
+      "name": "agentic-engineering-max",
+      "source": "./plugins/agentic-engineering-max",
+      "description": "Plan, build, review: a multi-agent engineering toolkit for Claude Code projects.",
+      "version": "1.0.0",
+      "category": "engineering",
+      "keywords": [
+        "agentic",
+        "build-system",
+        "code-review",
+        "planning",
+        "orchestration",
+        "atomic-claim",
+        "state-surface",
+        "epistemic-review"
+      ]
+    }
+  ]
+}
