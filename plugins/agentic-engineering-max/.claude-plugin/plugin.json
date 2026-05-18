@@ -1,0 +1,25 @@
+{
+  "name": "agentic-engineering-max",
+  "version": "1.0.0",
+  "description": "Plan, build, review: a multi-agent engineering toolkit for Claude Code projects.",
+  "license": "MIT",
+  "author": {
+    "name": "GhostlyGawd",
+    "email": "rhenmcleod@gmail.com"
+  },
+  "homepage": "https://github.com/GhostlyGawd/agentic-engineering-max",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/GhostlyGawd/agentic-engineering-max"
+  },
+  "keywords": [
+    "agentic",
+    "build-system",
+    "code-review",
+    "planning",
+    "orchestration",
+    "atomic-claim",
+    "state-surface",
+    "epistemic-review"
+  ]
+}
