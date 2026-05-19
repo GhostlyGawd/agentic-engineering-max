@@ -39,7 +39,7 @@ Three terminals run in parallel:
 
 1. **Orchestrator** (your main Claude Code session) -- drafts the plan, dispatches PM/workers/reviewers.
 2. **PM terminal** -- `/loop 30s /pm <slug>` keeps the task board fresh, sweeps stale locks, surfaces escalations.
-3. **Worker terminal(s)** -- each `/loop /worker <slug>` is one worker. Set `$env:WORKER_ID = 'worker-A'` before launching so commits and locks attribute correctly. A worker grinds 5 tasks per session, writes a handoff file, and stops.
+3. **Worker terminal(s)** -- each `/loop /worker <slug>` is one worker. In your PowerShell terminal, before launching Claude Code, set `$env:WORKER_ID = 'worker-A'` so commits and locks attribute correctly. A worker grinds 5 tasks per session, writes a handoff file, and stops.
 
 Reviewers run on demand: `/reviewer <slug>` claims any `in_review` task, runs the epistemic panel, and either marks the task `done` or sends it back as `needs_fixing` for the original worker to address (up to 3 iterations before automatic escalation).
 
@@ -50,10 +50,11 @@ Reviewers run on demand: `/reviewer <slug>` claims any `in_review` task, runs th
 - **State drift warning on every turn.** The drift hook compares `plan-ledger.md` against `plan-state.md` and yells when they disagree. Fix by re-running the relevant phase-owning agent (interviewer, PRD writer, spec writer, wave-closer) which updates state as part of its Definition of Done.
 - **`/aem-init` says "no git repo found".** Run `git init` first. The plugin's pre-commit hook needs a git repo to attach to.
 - **Pre-commit hook blocks a commit you want to make.** The hook only blocks commits that touch `plan-ledger.md` without also touching `plan-state.md` (state-mirror enforcement). Stage both files or amend your edit to include the matching state update.
+- **PowerShell refuses to run a `.ps1` hook with an ExecutionPolicy error.** Set the policy once per machine: `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`. Hooks invoked via `core.hooksPath` need this on default Windows installs.
 
 ## Scope and limits
 
-**v1 targets Windows 10/11 + PowerShell 5.1 (or later) + Git for Windows.** This is a STAGED commitment, not a permanent limit. The system is built for cross-platform v2 once adoption signal justifies the port -- see `STAGED-ROADMAP.md` for the threshold.
+**v1 targets Windows 10/11 + PowerShell 5.1 (or later) + Git for Windows.** This is a STAGED commitment (= pre-committed v2 with a public adoption threshold), not a permanent limit. The system is built for cross-platform v2 once adoption signal justifies the port -- see `STAGED-ROADMAP.md` for the threshold.
 
 Non-Windows installs trigger a graceful refusal at `/aem-init` time with a pointer to the v2 roadmap issue. The plugin will not silently malfunction on macOS or Linux; it explicitly tells you it is not yet supported.
 
@@ -73,6 +74,14 @@ See STAGED-ROADMAP.md for the v2 cross-platform commitment and adoption threshol
 - Git for Windows
 - Claude Code CLI (`claude`)
 
+## License
+
+MIT. See [LICENSE](./LICENSE).
+
+## Contributing
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md).
+
 ## Uninstall
 
 ```text
@@ -86,11 +95,3 @@ git config --unset core.hooksPath
 ```
 
 This reverses the pre-commit hook wiring. The plugin never modifies your `CLAUDE.md`, your `~/.claude/settings.json`, or any other operator file -- so uninstall is a clean operation.
-
-## License
-
-MIT. See [LICENSE](./LICENSE).
-
-## Contributing
-
-See [CONTRIBUTING.md](./CONTRIBUTING.md).
