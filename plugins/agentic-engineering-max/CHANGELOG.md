@@ -33,3 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Plugin targets Windows 10/11 + PowerShell 5.1 (or later) + Git for Windows.
   Cross-platform v2 is a roadmap item; see STAGED-ROADMAP.md and the pinned
   v2-roadmap tracking issue for the adoption threshold.
+
+### License
+
+- MIT. See LICENSE.
