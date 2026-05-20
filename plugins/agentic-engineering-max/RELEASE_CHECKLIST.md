@@ -23,13 +23,13 @@ Steps:
 
    Expected: prints the new commit SHA. No errors.
 
-2. Confirm the `public` remote is configured, then push the release branch:
+2. Confirm the `public` remote is configured AND points at the correct repo, then push the release branch:
 
     ```powershell
-    git remote -v | Select-String -Pattern '^public\s'
+    git remote -v | Select-String -Pattern '^public\s+https://github\.com/GhostlyGawd/agentic-engineering-max(\.git)?\s'
     ```
 
-   Expected: at least one line beginning with `public` pointing at `github.com/GhostlyGawd/agentic-engineering-max`. If empty, configure first:
+   Expected: at least one matching line. The pattern requires both the remote NAME (`public`) and the expected URL on the same line, so a `public` remote pointed at the wrong repo will NOT match (returns empty). If empty, configure first:
 
     ```powershell
     git remote add public https://github.com/GhostlyGawd/agentic-engineering-max.git
@@ -49,25 +49,34 @@ Steps:
     Set-Location $tmp
     ```
 
-4. List the top-level directory. Verify NO `planning/`, NO `tasks/`, NO `handoffs/`, NO `bin/` are present:
+4. (Informational only -- the binary gate is Step 5.) Eyeball the top-level for orientation:
 
     ```powershell
     Get-ChildItem -Force
     ```
 
-   Expected presence (top-level): `.claude-plugin/`, `plugins/`, `README.md`, possibly `LICENSE` and other shipped artifacts. **Forbidden at the repo top-level:** `planning/`, `tasks/`, `handoffs/`, `bin/`, `tests/` (the workspace-only test dir; NOTE: the plugin's own `plugins/agentic-engineering-max/tests/` directory IS expected and is NOT what this check forbids). Also forbidden anywhere: `tests/test-pre-commit-hook.ps1` (workspace-only).
+   For the current subtree shape, top-level should contain only `.claude-plugin/` (holding `marketplace.json`), `plugins/`, and the clone's own `.git/`. The shipped `README.md`, `LICENSE`, `CHANGELOG.md`, etc. live UNDER `plugins/agentic-engineering-max/`, NOT at the subtree root. This step is a sanity glance; do NOT treat a clean-looking eyeball as the pass -- Step 5a is the authoritative gate.
 
-5. Directory + content leakage checks. Both must return empty.
+5. Three leakage checks. All three must return empty.
 
-   5a. Path-based check (catches any forbidden directory regardless of file contents):
+   5a. Top-level allowlist check (AUTHORITATIVE gate -- catches ANY unexpected top-level entry, including future-renamed internal dirs the denylist below would miss):
 
     ```powershell
-    Get-ChildItem -Recurse -Directory -Force | Where-Object { $_.Name -in @('planning','tasks','handoffs','bin') -and $_.FullName -notlike '*\plugins\agentic-engineering-max\*' }
+    $expectedTop = @('.claude-plugin', 'plugins', '.git', 'README.md', 'LICENSE', 'CHANGELOG.md', 'CONTRIBUTING.md', '.gitignore')
+    Get-ChildItem -Force | Where-Object { $_.Name -notin $expectedTop }
     ```
 
-   Expected output: empty. Any hit indicates a forbidden top-level directory leaked through the subtree split.
+   Expected output: empty. Any hit is a leak OR a legitimately new top-level artifact. If the hit is a genuinely new shipped public-repo file (e.g. a newly added top-level `LICENSE`), extend `$expectedTop` and re-run; if it is an internal artifact (`planning/`, `tasks/`, `handoffs/`, `bin/`, top-level `tests/`), it leaked through the subtree split -- RELEASE BLOCKER.
 
-   5b. Content-based check (catches internal-tracking filenames anywhere in the tree):
+   5b. Recursive forbidden-directory deep check (defense-in-depth; catches a forbidden dir nested anywhere outside the plugin's own tree):
+
+    ```powershell
+    Get-ChildItem -Recurse -Directory -Force | Where-Object { $_.Name -in @('planning','tasks','handoffs','bin','tests') -and $_.FullName -notlike '*\plugins\agentic-engineering-max\*' }
+    ```
+
+   Expected output: empty. The `-notlike` carve-out excludes the plugin's own `plugins/agentic-engineering-max/tests/` directory, which IS expected and shipped. Any other hit indicates a forbidden directory leaked through the subtree split.
+
+   5c. Content-based check (catches internal-tracking filenames anywhere in the tree):
 
     ```powershell
     Get-ChildItem -Recurse -File | Select-String -Pattern 'plan-ledger\.md|plan-state\.md|task-board\.md' -List
@@ -84,11 +93,11 @@ Steps:
     git branch -D release/vX.Y.Z
     ```
 
-Pass criteria: Step 4 shows no forbidden directories; Step 5a returns empty; Step 5b grep returns empty.
+Pass criteria (binary, authoritative): Step 5a allowlist check returns empty AND Step 5b deep denylist returns empty AND Step 5c content grep returns empty. Step 4 is informational orientation only and is not a gate.
 
 ## Invariant 7 -- Uninstall cleanliness
 
-Goal: confirm the plugin uninstall reverses every operator-side change without leaving stale config.
+Goal: confirm the plugin's documented uninstall procedure reverses every operator-side change without leaving stale config. The shipped `README.md` ("Uninstall" section) documents uninstall as a deliberate TWO-step operation: (1) `/plugin uninstall agentic-engineering-max` removes the plugin, and (2) in each repo where `/aem-init` ran, the operator runs `git config --unset core.hooksPath` to reverse the per-repo hook wiring. `/plugin uninstall` is a Claude Code built-in that removes plugin files from `~/.claude`; it does NOT (and architecturally cannot) walk every repo where you set a per-repo `core.hooksPath`, so the manual unset is by design, not a bug. This invariant verifies that the full documented procedure leaves a clean repo, while still falsifying any case where the documented unset fails to clear the config or where a commit breaks afterward.
 
 Steps:
 
@@ -137,21 +146,41 @@ Steps:
 
    Expected: commit succeeds (no hook blocks).
 
-6. Uninstall the plugin (do NOT manually adjust `core.hooksPath` first -- the whole point of Step 7 is to detect whether `/plugin uninstall` left orphan git config behind):
+6. Step 1 of the documented uninstall -- remove the plugin (do NOT touch `core.hooksPath` yet; Step 7 must observe the genuine post-removal state before any remediation):
 
     ```text
     /plugin uninstall agentic-engineering-max
     ```
 
-7. Probe `core.hooksPath` directly (no remediation between Step 6 and this probe). This is the invariant-7 falsifier:
+   (This command form matches the shipped `README.md` "Uninstall" section. The spec acceptance criterion writes it as `<name>@<marketplace>`; the bare-name form here is intentional, kept consistent with the operator-facing README so the checklist and the doc the operator actually follows never disagree.)
+
+7. Diagnostic probe -- observe `core.hooksPath` with NO remediation between Step 6 and this probe. This records the true effect of `/plugin uninstall` alone:
 
     ```powershell
     git config --get core.hooksPath
     ```
 
-   Expected: empty output, exit code 1. **A non-empty value here is a RELEASE BLOCKER**: it proves `/plugin uninstall` did not unwind `core.hooksPath`, which means real operators will be left with a stale hook path after uninstall. Do NOT proceed to the tag/push step. Capture the observed value, file a bug against the uninstall flow, and re-run invariant 7 only after the uninstall is fixed. Manually running `git config --unset core.hooksPath` here would mask the bug; do not do it as part of release gating.
+   Expected per the documented design: STILL SET to the hooks path (because `/plugin uninstall` does not walk per-repo git config -- the manual unset in Step 8 is the documented second step). Record the observed value.
+   - If still set: this is the documented behavior; proceed to Step 8.
+   - If EMPTY: `/plugin uninstall` has begun auto-unwinding `core.hooksPath` -- a behavior change from what the README documents. This is NOT a release blocker, but it means the README's manual-unset instruction is now redundant and should be updated. File a doc-drift note and continue.
 
-8. Confirm subsequent `git commit` still works (no orphan hook reference). Only meaningful if Step 7 returned empty; if Step 7 failed, this step is moot until the uninstall is fixed.
+8. Step 2 of the documented uninstall -- run the manual unset exactly as the shipped README instructs the operator to:
+
+    ```powershell
+    git config --unset core.hooksPath
+    ```
+
+   This is the documented remediation, applied transparently AFTER the Step 7 observation -- not a silent mask of a hidden failure. If Step 7 already showed empty, this command is a harmless no-op (exit code 5, "key not present") and the procedure still passes.
+
+9. Pass-gate probe -- confirm the FULL documented procedure left no stale config:
+
+    ```powershell
+    git config --get core.hooksPath
+    ```
+
+   Expected: empty output, exit code 1. **A non-empty value here is a RELEASE BLOCKER**: it means the documented uninstall procedure (Steps 6 + 8 together) failed to clear `core.hooksPath` -- e.g. it was set at a scope the documented unset does not reach, or set under a different key. Do NOT proceed to the tag/push step. Capture the observed value and the scope (`git config --show-origin --get-all core.hooksPath`), file a bug against the uninstall procedure or `/aem-init`, and re-run invariant 7 only after it is fixed.
+
+10. Confirm a subsequent `git commit` still works (no orphan hook reference left behind):
 
     ```powershell
     Set-Content test2.txt "world" -Encoding UTF8
@@ -159,20 +188,20 @@ Steps:
     git commit -q -m "post-uninstall smoke commit"
     ```
 
-   Expected: commit succeeds.
+   Expected: commit succeeds. A failure here means the documented uninstall left a dangling hook reference -- a release blocker even if Step 9 showed empty.
 
-9. Cleanup:
+11. Cleanup:
 
     ```powershell
     Set-Location ..
     Remove-Item -Recurse -Force $proj
     ```
 
-Pass criteria: Step 7 returns empty (`core.hooksPath` correctly unwound by `/plugin uninstall` alone -- no manual remediation) AND Step 8 commits cleanly. Either criterion failing is a release blocker.
+Pass criteria: after the full documented two-step uninstall (Step 6 `/plugin uninstall` + Step 8 documented `git config --unset core.hooksPath`), Step 9 returns empty AND Step 10 commits cleanly. Either criterion failing is a release blocker. The Step 7 diagnostic is informational (records whether `/plugin uninstall` auto-unwinds); it never gates the release, but an EMPTY Step 7 result must be logged as a README doc-drift item.
 
 ## Demo asset realness check (T-022 / T-033 final gate)
 
-Per D-S7, the build inserts 1x1 placeholder assets at `assets/demo.gif` and `assets/screenshots/*.png` so the file-existence DoD criteria pass before the operator has recorded real demos. The real assets MUST land before the vX.Y.Z tag.
+Per decision D-S7 (anchored in `spec.md`, "D-S7 -- Demo GIF + screenshot deferral"; traces to PRD section 11 item 8), the build inserts 1x1 placeholder assets at `assets/demo.gif` and `assets/screenshots/*.png` so the file-existence DoD criteria pass before the operator has recorded real demos. The real assets MUST land before the vX.Y.Z tag.
 
 Steps:
 
