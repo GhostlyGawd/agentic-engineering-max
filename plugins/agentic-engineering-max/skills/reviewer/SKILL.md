@@ -43,7 +43,7 @@ Compute `$sessionId` from the D-S2 priority chain. Written into the `.lock` body
 
 ## Step 4 — Atomic claim
 
-Same mechanism as /worker. Lock path: `planning/<slug>/tasks/task-<id>.lock`. Body:
+Same mechanism as /worker. Lock path is derived from the task file's FILENAME STEM, NOT the frontmatter `id`: replace the claimed task's `.md` with `.lock` (e.g. `task-027.md` -> `task-027.lock`, never `task-T-027.lock`). PM's stale-sweep and `build-board.ps1`'s `task-*.lock` glob key on the filename stem; a lock named from the `T-`-prefixed frontmatter `id` protects nothing and lets a peer reviewer claim the same task with a differently-named lock. (Race-safety foot-gun caught 2026-05-20.) Lock path: `planning/<slug>/tasks/task-<stem>.lock`. Body:
 
 ```
 reviewer_id: <reviewer_id>

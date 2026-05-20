@@ -77,7 +77,7 @@ The shared-read failure path is normal and expected: the active claimer holds th
 
 ## Step 5 — Atomic claim (single PowerShell invocation, body written before Dispose)
 
-Lock path is the sibling of the task file: `planning/<slug>/tasks/task-<id>.lock`.
+Lock path is the sibling of the task file, named from the task file's FILENAME STEM -- NOT the frontmatter `id`. For `planning/<slug>/tasks/task-027.md` the lock is `planning/<slug>/tasks/task-027.lock`. Derive it by replacing the `.md` extension of the claimed task's path with `.lock` (so `<id>` here = `027`, the on-disk stem, never the frontmatter `id: T-027` which carries a `T-` prefix). This matters because PM's stale-sweep and `build-board.ps1`'s `task-*.lock` glob both key on the filename stem; a lock written as `task-T-027.lock` would protect NOTHING -- two agents could then both "claim" the same task with differently-named locks and collide. (Race-safety foot-gun caught in the 2026-05-20 swarm: a reviewer wrote `task-T-023.lock` while a peer held the real `task-023.lock`.)
 
 **Race-window closure.** A naive two-step pattern (`CreateNew` then `Set-Content`) leaves the lock file as zero bytes between the two calls — long enough for a peer reader (collision check, PM stale-sweep) to see an empty body and behave incorrectly. The correct pattern opens the file with `CreateNew`, writes the body through the same `FileStream`, flushes, then disposes — atomically present-and-populated from the perspective of any reader.
 
