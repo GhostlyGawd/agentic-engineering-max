@@ -255,10 +255,11 @@ Only reachable if Step 8's in-memory parse-check passed. From here, all state ch
    ```
    git add planning/<slug>/tasks/task-<id>.md
    git commit -m "T-NNN review iter <N>: <verdict>" \
-              -m "" \
               -m "Reviewer-ID: <reviewer_id>" \
               -m "Claude-Session-ID: <session_id>"
    ```
+
+   **Do NOT add a `-m ""` blank-paragraph flag.** On Windows PowerShell 5.1 the empty-string argument is silently dropped by native-command argument handling, unpairing the trailing `-m` flags (the commit then fails with the trailer values misread as pathspecs). git already inserts a blank line between `-m` paragraphs, so it is redundant. (Foot-gun confirmed in the 2026-05-19/20 swarm.)
 
 5. **Release the lock:** `Remove-Item "planning/<slug>/tasks/task-<id>.lock" -Force`.
 
@@ -302,7 +303,6 @@ If `>= 5`:
    ```
    git add planning/<slug>/handoffs/reviewer-<reviewer_id>-*.md
    git commit -m "T-multi: reviewer <reviewer_id> loop cap (5 reviewed)" \
-              -m "" \
               -m "Reviewer-ID: <reviewer_id>" \
               -m "Claude-Session-ID: <session_id>"
    ```

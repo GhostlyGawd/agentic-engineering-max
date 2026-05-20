@@ -133,10 +133,11 @@ Stage and commit the work and the in_review flip in ONE git commit. This is the 
 ```
 git add <paths of the files you actually changed in Step 7> planning/<slug>/tasks/task-<id>.md
 git commit -m "T-NNN: <one-line title> (ready for review)" \
-           -m "" \
            -m "Worker-ID: <worker_id>" \
            -m "Claude-Session-ID: <session_id>"
 ```
+
+**Do NOT add a `-m ""` blank-paragraph flag between the subject and the trailers.** On Windows PowerShell 5.1 the empty-string argument is silently dropped by native-command argument handling, which unpairs the trailing `-m` flags (git then treats `Worker-ID:`/`Claude-Session-ID:` values as pathspecs and the commit fails). git already inserts a blank line between each `-m` paragraph, so the empty flag is redundant anyway. (Foot-gun confirmed by two independent workers in the 2026-05-19/20 swarm.)
 
 Constraints:
 
@@ -198,7 +199,6 @@ If the new value is `>= 5`:
    ```
    git add planning/<slug>/handoffs/worker-<worker_id>-*.md
    git commit -m "T-multi: worker <worker_id> loop cap (5 done)" \
-              -m "" \
               -m "Worker-ID: <worker_id>" \
               -m "Claude-Session-ID: <session_id>"
    ```
