@@ -1,0 +1,8 @@
+{
+  "ledger_state_buffer_minutes": 5,
+  "wave_detection_window_minutes": 60,
+  "ignored_missing_agents": [
+    "transcript-miner-dispatcher",
+    "plan-interviewer"
+  ]
+}
