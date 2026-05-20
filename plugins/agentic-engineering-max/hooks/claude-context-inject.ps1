@@ -26,13 +26,15 @@
 #     principle file, and never creates files. Its only output channel is
 #     stdout (the additionalContext JSON envelope).
 #
-# (c) Nudge condition (D-S10 step 3):
-#     The /aem-init nudge is appended ONLY when core.hooksPath resolves to
-#     empty -- i.e. git not on PATH, not inside a git repo, or the config key
-#     is unset. If core.hooksPath equals the plugin hooks dir (trailing-
-#     separator and slash-direction tolerant, case-insensitive) there is no
-#     nudge. If core.hooksPath is any OTHER non-empty value the operator has a
-#     different hooks setup and we respect it -- no nudge.
+# (c) Nudge condition (D-S10 step 3 / ledger Field 19 LOCKED v1):
+#     The /aem-init nudge is appended whenever core.hooksPath is NOT configured
+#     to the plugin's hooks dir. Two branches trigger it: (1) core.hooksPath
+#     resolves empty -- git not on PATH, not inside a git repo, or the config
+#     key is unset; (2) core.hooksPath is any non-empty value that does not
+#     match the plugin hooks dir (a foreign hooks setup where build-system
+#     enforcement is not wired to the plugin). Only an exact match to the plugin
+#     hooks dir (trailing-separator and slash-direction tolerant, case-
+#     insensitive) suppresses the nudge.
 #
 # Output channel: hookSpecificOutput.additionalContext (raw stdout is ignored).
 # ASCII discipline: every double-quoted literal in this file is ASCII only.
@@ -100,9 +102,13 @@ try {
     $pluginHooksKey = Format-PathKey (Join-Path $pluginRoot 'hooks')
     $hooksPathKey   = Format-PathKey $hooksPath
 
-    # Nudge only when core.hooksPath resolved empty. Any non-empty value (ours
-    # or the operator's own) suppresses the nudge.
-    $appendNudge = [string]::IsNullOrWhiteSpace($hooksPathKey)
+    # Nudge whenever core.hooksPath is NOT configured to the plugin's hooks dir
+    # (Field 19 LOCKED v1). This covers two cases the operator-conversion nudge
+    # exists for: (1) empty -- git absent / not a repo / key unset; (2) any other
+    # non-empty value -- a foreign hooks dir where build-system enforcement is
+    # not wired to the plugin. Only an exact (tolerant) match to the plugin hooks
+    # dir suppresses the nudge.
+    $appendNudge = ($hooksPathKey -ne $pluginHooksKey)
 
     $composed = $templateText
     if ($appendNudge) {
