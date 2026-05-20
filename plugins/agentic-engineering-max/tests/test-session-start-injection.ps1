@@ -23,7 +23,7 @@
 # Run:    powershell -NoProfile -ExecutionPolicy Bypass -File tests\test-session-start-injection.ps1
 # Exit:   0 = all pass, 1 = at least one failed.
 #
-# Convention (D:\GitHub Projects\Dev_006\CLAUDE.md "Testing"): targeted,
+# Convention (project CLAUDE.md "Testing" section): targeted,
 # high-signal regression test; plain .ps1, no framework dependency.
 # ASCII-only inside this file (machine note: no non-ASCII in PS 5.1 literals).
 

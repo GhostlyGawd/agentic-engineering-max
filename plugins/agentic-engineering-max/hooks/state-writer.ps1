@@ -15,9 +15,11 @@
 # The v1 UserPromptSubmit drift-check at ~/.claude/hooks/state-drift-check.ps1
 # is the documented recovery channel. Nothing else.
 #
-# Allowlist (v1): D:\GitHub Projects\Dev_006 only. Out-of-allowlist invocation
-# exits 0 silently with no writes. If $PWD is outside the repo (SessionStart
-# may fire from anywhere), a literal allowlist fallback re-resolves the root.
+# Repo resolution (v1): the writer acts in whatever git repo it resolves by
+# walking up from $PWD. If $PWD is outside any repo (SessionStart may fire from
+# anywhere), it exits 0 silently with no writes -- a portable plugin has no
+# fixed repo to fall back to. Get-ManagedSlugs further gates writes to repos
+# that actually carry a planning/<slug>/ build.
 #
 # Meaningful-work heuristic (any one TRUE -> we write):
 #   1. git rev-list --count <merge-base..HEAD> on current branch > 0
@@ -63,12 +65,12 @@ $ErrorActionPreference = 'Continue'
 # ---------- Library functions ----------
 
 function Get-AllowedRepoRoot {
-    # Resolve repo root by walking up from $PWD; allowlist-gate against the
-    # known managed repo. If the walk-up fails (e.g., SessionStart fires from
-    # outside the repo), fall back to the literal allowlist entries so the
-    # recovery channel remains observable.
-    $allowlist = @('D:\GitHub Projects\Dev_006')
-
+    # Resolve repo root by walking up from $PWD looking for a .git or planning
+    # dir. Returns the resolved repo root, or $null when $PWD is outside any
+    # repo (SessionStart can fire from anywhere). A portable plugin has no
+    # fixed repo to fall back to, so an unresolved root is a silent no-op;
+    # downstream Get-ManagedSlugs further gates writes to repos that actually
+    # carry a planning/<slug>/ build.
     $repoRoot = $null
     $cur = (Get-Location).Path
     while ($cur -and $cur.Length -gt 3) {
@@ -80,23 +82,7 @@ function Get-AllowedRepoRoot {
         if (-not $parent -or $parent -eq $cur) { break }
         $cur = $parent
     }
-
-    if ($repoRoot) {
-        $norm = $repoRoot.TrimEnd('\','/')
-        foreach ($entry in $allowlist) {
-            if ($entry.TrimEnd('\','/').Equals($norm, [StringComparison]::OrdinalIgnoreCase)) {
-                return $repoRoot
-            }
-        }
-    }
-
-    # Walk-up failed or hit an unallowed root. Try the allowlist literally.
-    foreach ($entry in $allowlist) {
-        if (Test-Path (Join-Path $entry '.git')) {
-            return $entry
-        }
-    }
-    return $null
+    return $repoRoot
 }
 
 function Get-StateWriterSessionId {

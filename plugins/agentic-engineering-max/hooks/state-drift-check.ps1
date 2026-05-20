@@ -19,7 +19,7 @@
 #    fresh Claude sessions read plan-state.md directly via Glob and never
 #    consult README. README is human-facing convention, not contract.)
 #
-# Sidecar config (optional): C:\Users\rhenm\.claude\hooks\state-drift-check.config.json
+# Sidecar config (optional): ${CLAUDE_PLUGIN_ROOT}/hooks/state-drift-check.config.json
 #   Recognized keys (v1.1):
 #     ledger_state_buffer_minutes      integer  default 5
 #       Tolerance window for the "ledger newer than state" drift check.
@@ -32,9 +32,15 @@
 #       List of agent basenames (no .md) that the agent-existence check should
 #       suppress. Use when planning docs cite historically-deleted agents whose
 #       references survive in the prose for documentation reasons.
+#     allowlist                        array    default []
+#       Repo root paths the hook is allowed to act in. When empty/absent, the
+#       hook acts in whatever repo it resolves from $PWD (default-allow). The
+#       hook only emits read-only drift warnings, so default-allow is safe.
 #   Additional keys are silently ignored. Absent file applies all defaults silently.
 #
-# Allowlist (v1): D:\GitHub Projects\Dev_006 only. Other repos no-op silently.
+# Allowlist (v1): operator-configurable via the sidecar config 'allowlist' key.
+# Empty/absent allowlist => act in the resolved repo. Configure the key to
+# restrict the hook to specific repo roots.
 # Output channel: hookSpecificOutput.additionalContext (raw stdout is dropped).
 # Internal errors: emit [state-drift-check] internal error: <msg>. Never silent-fail.
 
@@ -42,7 +48,11 @@ $ErrorActionPreference = 'Continue'
 $null = [Console]::In.ReadToEnd()
 
 try {
-    $allowlist = @('D:\GitHub Projects\Dev_006')
+    # Plugin root for plugin-internal asset references (sidecar config + the
+    # shipped agent files). Prefer the runtime-provided env var; fall back to
+    # this script's own location so the hook also works when run directly.
+    $pluginRoot = $env:CLAUDE_PLUGIN_ROOT
+    if ([string]::IsNullOrWhiteSpace($pluginRoot)) { $pluginRoot = Split-Path -Parent $PSScriptRoot }
 
     # Resolve repo root: walk up from $PWD looking for .git or planning dir.
     $repoRoot = $null
@@ -59,22 +69,15 @@ try {
 
     if (-not $repoRoot) { exit 0 }
 
-    # Allowlist check (case-insensitive, trailing-separator tolerant).
-    $norm = $repoRoot.TrimEnd('\','/')
-    $allowed = $false
-    foreach ($entry in $allowlist) {
-        if ($entry.TrimEnd('\','/').Equals($norm, [StringComparison]::OrdinalIgnoreCase)) {
-            $allowed = $true
-            break
-        }
-    }
-    if (-not $allowed) { exit 0 }
-
-    # Sidecar config load.
+    # Sidecar config load (resolved under the plugin root). The optional
+    # 'allowlist' key restricts which repos the hook acts in; absent/empty
+    # means "act in the resolved repo" (default-allow; safe because this hook
+    # only emits read-only drift warnings).
     $bufferMinutes = 5
     $waveWindowMinutes = 60
     $ignoredMissingAgents = @()
-    $configPath = 'C:\Users\rhenm\.claude\hooks\state-drift-check.config.json'
+    $allowlist = @()
+    $configPath = Join-Path $pluginRoot 'hooks/state-drift-check.config.json'
     $internalErrors = @()
     if (Test-Path $configPath) {
         try {
@@ -89,11 +92,27 @@ try {
             if ($null -ne $config.ignored_missing_agents) {
                 $ignoredMissingAgents = @($config.ignored_missing_agents)
             }
+            if ($null -ne $config.allowlist) {
+                $allowlist = @($config.allowlist)
+            }
         } catch {
             $msg = $_.Exception.Message -replace "`r?`n", '; '
             if ($msg.Length -gt 300) { $msg = $msg.Substring(0, 297) + '...' }
             $internalErrors += "[state-drift-check] internal error: sidecar config parse: $msg"
         }
+    }
+
+    # Allowlist gate: only enforced when an allowlist is configured.
+    if ($allowlist.Count -gt 0) {
+        $norm = $repoRoot.TrimEnd('\','/')
+        $allowed = $false
+        foreach ($entry in $allowlist) {
+            if ($entry.TrimEnd('\','/').Equals($norm, [StringComparison]::OrdinalIgnoreCase)) {
+                $allowed = $true
+                break
+            }
+        }
+        if (-not $allowed) { exit 0 }
     }
 
     $messages = @()
@@ -171,9 +190,9 @@ try {
             }
             foreach ($agentName in $foundAgents.Keys) {
                 if ($ignoredMissingAgents -contains $agentName) { continue }
-                $agentPath = "C:\Users\rhenm\.claude\agents\$agentName.md"
+                $agentPath = Join-Path $pluginRoot "agents/$agentName.md"
                 if (-not (Test-Path $agentPath)) {
-                    $messages += "Drift detected: referenced agent $agentName missing at ~/.claude/agents/$agentName.md. Create or rename before next phase."
+                    $messages += "Drift detected: referenced agent $agentName missing at `${CLAUDE_PLUGIN_ROOT}/agents/$agentName.md. Create or rename before next phase (or add it to the sidecar config 'ignored_missing_agents' if it is an operator-local agent)."
                 }
             }
         }

@@ -119,10 +119,14 @@ PM has no loop cap and no claim mechanic. Workers and reviewers atomic-claim via
   settings.json               # Registers SessionEnd + SessionStart hooks
 ```
 
-### In-repo files (`D:\GitHub Projects\Dev_006\`)
+### In-repo files (development/source repo layout, `<dev-repo-root>/`)
+
+These paths describe the development repository where the plugin is built and
+dogfooded (historical layout); in an installed plugin the scripts live under
+`${CLAUDE_PLUGIN_ROOT}/scripts/`.
 
 ```
-D:\GitHub Projects\Dev_006\
+<dev-repo-root>/
   bin/
     build-board.ps1           # Regenerates task-board.md from per-task frontmatter
     board-print.ps1           # Stdout-print variant (used by /board command)

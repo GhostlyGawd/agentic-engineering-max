@@ -162,7 +162,7 @@ If any pointer is stale, update the pointer (or the document it points at) befor
 
 ## Check 4 — Verify referenced agent files exist
 
-For every agent name referenced in `plan.md` / `plan-state.md` / `plan-ledger.md` / `prd.md` / `spec.md` (any `~/.claude/agents/<name>.md` reference, any "spawned by", "invokes", "hands off to" reference), verify the corresponding file exists at `C:\Users\rhenm\.claude\agents\<name>.md`. If a referenced agent file is missing, either create it (if creation is in scope for your phase) or flag it in your handoff report as a blocker for the next phase. Do not silently ship a document that names an agent that does not exist on disk.
+For every agent name referenced in `plan.md` / `plan-state.md` / `plan-ledger.md` / `prd.md` / `spec.md` (any `~/.claude/agents/<name>.md` reference, any "spawned by", "invokes", "hands off to" reference), verify the corresponding file exists at `${CLAUDE_PLUGIN_ROOT}/agents/<name>.md` (or the operator's own `~/.claude/agents/<name>.md`). If a referenced agent file is missing, either create it (if creation is in scope for your phase) or flag it in your handoff report as a blocker for the next phase. Do not silently ship a document that names an agent that does not exist on disk.
 
 ---
 

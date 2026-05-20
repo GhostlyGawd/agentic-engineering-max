@@ -59,8 +59,8 @@ function Run-Test {
         & $SetupStage
 
         # Real commit attempt. PS5.1 wraps native-exe stderr as RemoteException
-        # when redirected via 2>&1 (see C:\Users\rhenm\.claude\CLAUDE.md), so
-        # use Start-Process with file redirection instead.
+        # when redirected via 2>&1 (see the user's global CLAUDE.md machine
+        # notes), so use Start-Process with file redirection instead.
         $stdoutFile = [IO.Path]::GetTempFileName()
         $stderrFile = [IO.Path]::GetTempFileName()
         $proc = Start-Process -FilePath 'git' `

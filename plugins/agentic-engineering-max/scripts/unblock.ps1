@@ -32,9 +32,15 @@ $ErrorActionPreference = 'Stop'
 # Normalize: strip a leading T- so 'T-W2-005' resolves to task-W2-005.md.
 $taskIdBare = $TaskId -replace '^T-', ''
 
-# Repo root is hard-coded to match the rest of the Dev_006 toolchain
-# (board-print.ps1, audit-claim-events.ps1, etc).
-$repoRoot = 'D:\GitHub Projects\Dev_006'
+# Repo root: resolve the operator's repo dynamically from the current working
+# directory (the /unblock slash command runs inside the operator's repo). A
+# portable plugin cannot hard-code a repo path.
+$repoRoot = (git rev-parse --show-toplevel 2>$null)
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($repoRoot)) {
+    [Console]::Error.WriteLine("ERROR: /unblock must be run inside a git repository.")
+    exit 1
+}
+$repoRoot = $repoRoot.Trim()
 $taskFile = Join-Path $repoRoot ("planning\" + $Slug + "\tasks\task-" + $taskIdBare + ".md")
 
 if (-not (Test-Path $taskFile)) {

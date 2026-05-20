@@ -13,5 +13,5 @@ if [[ -z "$SLUG" ]]; then
   exit 1
 fi
 
-powershell -NoProfile -ExecutionPolicy Bypass -File "D:\GitHub Projects\Dev_006\bin\board-print.ps1" "$SLUG"
+powershell -NoProfile -ExecutionPolicy Bypass -File "${CLAUDE_PLUGIN_ROOT}/scripts/board-print.ps1" "$SLUG"
 ```

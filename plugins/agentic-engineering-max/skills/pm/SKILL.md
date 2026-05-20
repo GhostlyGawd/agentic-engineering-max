@@ -34,7 +34,7 @@ Run these steps in order. Each step is a finite operation. The whole tick should
 ## Step 1 — Regenerate the board
 
 Bash:
-`powershell -NoProfile -ExecutionPolicy Bypass -File "D:\GitHub Projects\Dev_006\bin\build-board.ps1" <slug>`
+`powershell -NoProfile -ExecutionPolicy Bypass -File "${CLAUDE_PLUGIN_ROOT}/scripts/build-board.ps1" <slug>`
 
 This rewrites `planning/<slug>/task-board.md` from current task frontmatter. If the script exits non-zero, emit `[HH:MM:SS] !! BOARD GEN FAILED: <first stderr line>` and exit 0. Never crash the loop — a broken board generator should not stop PM from observing other state.
 
@@ -42,7 +42,7 @@ This rewrites `planning/<slug>/task-board.md` from current task frontmatter. If 
 
 If `planning/<slug>/.status-request` exists:
 
-- Bash: `powershell -NoProfile -ExecutionPolicy Bypass -File "D:\GitHub Projects\Dev_006\bin\board-print.ps1" <slug>`. Print its stdout verbatim — this is the full D-S4-schema board.
+- Bash: `powershell -NoProfile -ExecutionPolicy Bypass -File "${CLAUDE_PLUGIN_ROOT}/scripts/board-print.ps1" <slug>`. Print its stdout verbatim — this is the full D-S4-schema board.
 - Delete the sentinel: `Remove-Item "planning/<slug>/.status-request" -Force`.
 - Continue with the rest of the tick (still emit the tick summary at the end).
 

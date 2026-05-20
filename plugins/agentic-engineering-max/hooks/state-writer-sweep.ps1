@@ -12,8 +12,8 @@
 # ~/.claude/hooks/state-drift-check.ps1, which surfaces drift between
 # plan-ledger.md and plan-state.md on the next prompt submission.
 #
-# Allowlist: identical to state-writer.ps1 (D:\GitHub Projects\Dev_006), with
-# the same literal-allowlist fallback when $PWD is outside the repo.
+# Repo resolution: identical to state-writer.ps1 -- resolves the repo by
+# walking up from $PWD; no-ops silently when $PWD is outside any repo.
 #
 # Idempotency: running twice in a row produces no second write. The first
 # sweep's state-writer: commit becomes the most recent commit in the planning
@@ -48,7 +48,9 @@ try {
     # Dot-source state-writer.ps1 for shared functions. Set the lib-only env
     # flag so the sourced file does not run its own main block.
     $env:STATE_WRITER_LIB_ONLY = '1'
-    $writerPath = 'C:\Users\rhenm\.claude\hooks\state-writer.ps1'
+    $pluginRoot = $env:CLAUDE_PLUGIN_ROOT
+    if ([string]::IsNullOrWhiteSpace($pluginRoot)) { $pluginRoot = Split-Path -Parent $PSScriptRoot }
+    $writerPath = Join-Path $pluginRoot 'hooks/state-writer.ps1'
     if (-not (Test-Path $writerPath)) {
         [Console]::Error.WriteLine("state-writer-sweep.ps1: cannot find state-writer.ps1 at $writerPath")
         exit 0

@@ -25,5 +25,5 @@ if [[ -z "$SLUG" || -z "$TASK_ID" ]]; then
   exit 1
 fi
 
-powershell -NoProfile -ExecutionPolicy Bypass -File "D:\GitHub Projects\Dev_006\bin\unblock.ps1" "$SLUG" "$TASK_ID" "$FLAG"
+powershell -NoProfile -ExecutionPolicy Bypass -File "${CLAUDE_PLUGIN_ROOT}/scripts/unblock.ps1" "$SLUG" "$TASK_ID" "$FLAG"
 ```

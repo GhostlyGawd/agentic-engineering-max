@@ -158,7 +158,7 @@ Not directly load-bearing during the interview phase (neither PRD nor spec exist
 
 ## Check 4 — Referenced agent files exist
 
-For every agent name referenced in `plan-state.md` / `plan-ledger.md` (any `~/.claude/agents/<name>.md` reference, any "spawned by", "invokes", "hands off to" reference), verify the corresponding file exists at `C:\Users\rhenm\.claude\agents\<name>.md`. If a referenced agent file is missing, either create it (if creation is in scope for the interview) or flag it in your handoff report as a blocker for the next phase. Do not silently ship a document that names an agent that does not exist on disk.
+For every agent name referenced in `plan-state.md` / `plan-ledger.md` (any `~/.claude/agents/<name>.md` reference, any "spawned by", "invokes", "hands off to" reference), verify the corresponding file exists at `${CLAUDE_PLUGIN_ROOT}/agents/<name>.md` (or the operator's own `~/.claude/agents/<name>.md`). If a referenced agent file is missing, either create it (if creation is in scope for the interview) or flag it in your handoff report as a blocker for the next phase. Do not silently ship a document that names an agent that does not exist on disk.
 
 Exception: if the agent has been intentionally converted to a skill (the plan-interviewer itself is the canonical example), reference the skill path (`~/.claude/skills/<name>/SKILL.md`) instead, and add the agent slug to the hook's `ignored_missing_agents` sidecar list.
 
