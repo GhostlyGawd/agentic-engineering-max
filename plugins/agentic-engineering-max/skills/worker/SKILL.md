@@ -141,6 +141,7 @@ git commit -m "T-NNN: <one-line title> (ready for review)" \
 
 Constraints:
 
+- **Run every git command from the repo root.** If your work created a new subdirectory and your shell CWD drifted into it (e.g., you `cd`'d into `assets/` to create files), repo-relative pathspecs like `git add planning/<slug>/...` will fail with `fatal: did not match any files` and -- worse -- a follow-on `git commit` may then commit only a partial set (just the task flip, leaving deliverables untracked). Either `cd` back to the repo root before staging, or pin every git invocation with `git -C <repo-root> ...`. (Foot-gun observed in the 2026-05-20 swarm: a worker's commit split into two because its CWD had drifted into `assets/`.)
 - Do NOT use `git add -A` or `git add .` (cross-project safety — could pick up unrelated dirty state).
 - Do NOT skip a hook (no `--no-verify`).
 - If the commit fails (pre-commit hook, etc.): investigate and fix the underlying issue. Do NOT amend prior commits. Do NOT proceed to Step 10 — the `.lock` stays held by you, so PM will eventually stale-sweep it (30 min default) and the task re-opens for re-claim by you or another worker.
