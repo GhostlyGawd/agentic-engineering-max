@@ -12,7 +12,10 @@
 #   1  not inside a git repository
 #   2  core.hooksPath conflict (existing non-default, non-plugin value) and
 #      -Force was not passed
-#   3  plugin hooks directory ($env:CLAUDE_PLUGIN_ROOT\hooks) does not exist
+#   3  plugin hooks directory unavailable -- two sub-cases share this code:
+#      (a) $env:CLAUDE_PLUGIN_ROOT is unset/empty (not run inside the plugin
+#          runtime), or (b) $env:CLAUDE_PLUGIN_ROOT\hooks does not exist
+#      on disk. Both mean "the plugin hooks dir cannot be resolved."
 #   4  unexpected internal error (top-level catch)
 #
 # Conventions: ASCII-only inside double-quoted literals; git invocations send
@@ -51,7 +54,13 @@ try {
 
     # --- 3. Inspect any existing core.hooksPath -------------------------------
     $existing = git config --get core.hooksPath 2>$null
-    if ($LASTEXITCODE -ne 0) { $existing = "" }
+    # git config --get exits 1 when the key is simply unset -- that is the
+    # legitimate "no value" case (no output). A nonzero exit accompanied by
+    # actual output (e.g. exit 2 for a multi-valued key) must NOT be collapsed
+    # to empty: doing so would normalize to "no conflict" and silently bypass
+    # the exit-2 conflict guard, overwriting a real existing value. Only treat
+    # as unset when git both failed AND produced no output.
+    if ($LASTEXITCODE -ne 0 -and [string]::IsNullOrWhiteSpace(($existing -join ' '))) { $existing = "" }
 
     # Normalize for comparison: forward slashes, trimmed trailing separator,
     # lower-cased. Tolerates trailing-separator and case differences.
@@ -100,7 +109,7 @@ Lifecycle stage: Planning - interview not yet begun
 Last updated: $today
 Latest PRD version: none
 Latest spec version: none
-Progress: 0 tasks defined
+Open-PR stack: none
 Next action: Run the plan-interviewer to reach 100% understanding before any PRD or spec is written.
 Scorecard summary: 0/0 interview fields at 100%
 
