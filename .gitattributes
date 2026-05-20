@@ -1,0 +1,22 @@
+# agentic-engineering-max ships LF line endings on every platform.
+#
+# Dev_006's repo-level core.autocrlf=true rewrites text files to CRLF on
+# Windows checkout. That broke the byte-for-byte migration-parity criterion
+# (T-013/T-014/T-016: sources under ~/.claude are LF-only, but the checked-
+# out plugin copies became CRLF) and would ship CRLF in a cross-platform
+# public release. eol=lf pins both the stored blob and the checkout to LF.
+#
+# This file is at plugin/ so it (a) governs the dev mirror's plugin tree and
+# (b) becomes the public repo's root .gitattributes after the Pattern-A
+# `git subtree split --prefix=plugin/` release. See
+# planning/state-surface-discipline/plan-ledger.md 2026-05-20 entry.
+
+* text=auto eol=lf
+
+# Binary assets must never be EOL-converted.
+*.png binary
+*.gif binary
+*.jpg binary
+*.jpeg binary
+*.ico binary
+*.zip binary
