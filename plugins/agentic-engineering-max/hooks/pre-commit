@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# hooks/pre-commit - bash shim invoked by git pre-commit.
+#
+# Git looks for hook files named exactly 'pre-commit' (no extension).
+# The real logic lives in hooks/pre-commit.ps1 to match the rest of
+# the Dev_006 toolchain (bin/*.ps1).
+set -e
+exec powershell -NoProfile -ExecutionPolicy Bypass -File "$(dirname "$0")/pre-commit.ps1"
