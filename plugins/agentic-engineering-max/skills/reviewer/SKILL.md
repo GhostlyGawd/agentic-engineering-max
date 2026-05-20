@@ -256,8 +256,11 @@ Only reachable if Step 8's in-memory parse-check passed. From here, all state ch
    git add planning/<slug>/tasks/task-<id>.md
    git commit -m "T-NNN review iter <N>: <verdict>" \
               -m "Reviewer-ID: <reviewer_id>" \
-              -m "Claude-Session-ID: <session_id>"
+              -m "Claude-Session-ID: <session_id>" \
+              -- planning/<slug>/tasks/task-<id>.md
    ```
+
+   **Always end the commit with `-- planning/<slug>/tasks/task-<id>.md` (commit-isolation).** Concurrent reviewers/workers share ONE git index. Without the trailing pathspec your commit can absorb another reviewer's just-staged task file (observed 2026-05-20: reviewer-A's commit swept in reviewer-B's task-018.md). The `-- <pathspec>` commits ONLY your task file from a temporary index, ignoring anything else concurrently staged, and the pre-commit wildcard guard sees that temp index so it will not false-block.
 
    **Do NOT add a `-m ""` blank-paragraph flag.** On Windows PowerShell 5.1 the empty-string argument is silently dropped by native-command argument handling, unpairing the trailing `-m` flags (the commit then fails with the trailer values misread as pathspecs). git already inserts a blank line between `-m` paragraphs, so it is redundant. (Foot-gun confirmed in the 2026-05-19/20 swarm.)
 
@@ -304,7 +307,8 @@ If `>= 5`:
    git add planning/<slug>/handoffs/reviewer-<reviewer_id>-*.md
    git commit -m "T-multi: reviewer <reviewer_id> loop cap (5 reviewed)" \
               -m "Reviewer-ID: <reviewer_id>" \
-              -m "Claude-Session-ID: <session_id>"
+              -m "Claude-Session-ID: <session_id>" \
+              -- planning/<slug>/handoffs/reviewer-<reviewer_id>-*.md
    ```
    If the commit fails: emit `[<reviewer_id>] HANDOFF commit failed; not writing loop-stop sentinel` to stderr, leave HANDOFF.md untracked on disk, exit 1. The next `/loop` tick re-fires and re-attempts; the cap-completion sequence is idempotent.
 

@@ -60,7 +60,7 @@ Compute `$sessionId` from the D-S2 priority chain. Use this value verbatim in th
 1. Glob `planning/<slug>/tasks/task-*.md`. Read each frontmatter (the YAML block between `---` fences at the top).
 2. Build the candidate list by applying the priority filter in this exact order:
    - **Priority 1:** `status: needs_fixing` AND `owner == $env:WORKER_ID` AND `review_iterations < 3` AND every entry in `depends_on:` has `status: done` (read the named task files to check). Re-work belongs to the original worker.
-   - **Priority 2:** `status: open` AND every entry in `depends_on:` has `status: done` AND no sibling `task-<id>.lock` file exists.
+   - **Priority 2:** `status: open` AND `type` is NOT `operator-action` AND every entry in `depends_on:` has `status: done` AND no sibling `task-<id>.lock` file exists. (Operator-action tasks -- e.g. "create the public GitHub repo" -- are never worker-claimable; their bodies say so. Skipping them in the filter avoids wasting a tick "considering" a task you cannot claim. `hybrid`-type tasks are claimable only when their stated precondition holds -- read the body.)
 3. Within each priority band, lex-sort by task ID (`T-W1-001` < `T-W1-002` < `T-W2-001`) and take the lowest.
 4. If no candidate matches: stdout `[<worker_id>] no claimable tasks; exiting tick` and exit 0. Skip does NOT count toward `$env:WORKER_LOOP_COUNT`.
 
@@ -134,8 +134,11 @@ Stage and commit the work and the in_review flip in ONE git commit. This is the 
 git add <paths of the files you actually changed in Step 7> planning/<slug>/tasks/task-<id>.md
 git commit -m "T-NNN: <one-line title> (ready for review)" \
            -m "Worker-ID: <worker_id>" \
-           -m "Claude-Session-ID: <session_id>"
+           -m "Claude-Session-ID: <session_id>" \
+           -- <paths of the files you actually changed in Step 7> planning/<slug>/tasks/task-<id>.md
 ```
+
+**Always end the commit with `-- <your exact files>` (commit-isolation).** Concurrent swarm workers/reviewers share ONE git index. Without the trailing pathspec, your `git commit` captures whatever is staged AT THAT INSTANT -- including another worker's just-`git add`ed files -- which cross-contaminates commits or splits transitions. The `-- <pathspec>` makes git commit ONLY those paths from a temporary index, ignoring anything else concurrently staged. (The `git add` first is still needed so NEW files become tracked; the trailing pathspec then scopes the commit.) The pre-commit wildcard guard sees the temp index too, so this also avoids a false-positive block. (Race confirmed in the 2026-05-20 swarm: reviewer-A's commit absorbed reviewer-B's staged task file because both shared the index.)
 
 **Do NOT add a `-m ""` blank-paragraph flag between the subject and the trailers.** On Windows PowerShell 5.1 the empty-string argument is silently dropped by native-command argument handling, which unpairs the trailing `-m` flags (git then treats `Worker-ID:`/`Claude-Session-ID:` values as pathspecs and the commit fails). git already inserts a blank line between each `-m` paragraph, so the empty flag is redundant anyway. (Foot-gun confirmed by two independent workers in the 2026-05-19/20 swarm.)
 
@@ -201,7 +204,8 @@ If the new value is `>= 5`:
    git add planning/<slug>/handoffs/worker-<worker_id>-*.md
    git commit -m "T-multi: worker <worker_id> loop cap (5 done)" \
               -m "Worker-ID: <worker_id>" \
-              -m "Claude-Session-ID: <session_id>"
+              -m "Claude-Session-ID: <session_id>" \
+              -- planning/<slug>/handoffs/worker-<worker_id>-*.md
    ```
 
    **If the commit fails** (pre-commit hook, dirty index, signing failure): emit to stderr `[<worker_id>] HANDOFF commit failed; not writing loop-stop sentinel`, leave HANDOFF.md on disk untracked, exit 1. The next `/loop` tick re-fires, finds no sentinel, the cap-check fires again (`WORKER_LOOP_COUNT` is still >= 5), and the cap-completion sequence is re-attempted. This is idempotent — if the HANDOFF.md file already exists on disk, you may overwrite it with a fresh timestamp (path includes the ISO).
