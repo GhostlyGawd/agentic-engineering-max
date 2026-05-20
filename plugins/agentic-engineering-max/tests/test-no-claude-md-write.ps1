@@ -73,6 +73,13 @@ try {
     git config user.name  'no-claude-md-write-test'
 
     # Sentinel operator CLAUDE.md with a known marker + pinned mtime + hash.
+    # NOTE: this is the OPERATOR's protected repo-root CLAUDE.md -- the file the
+    # invariant forbids the plugin from touching. It is a different file from the
+    # plugin's docs\CLAUDE-template.md, which the inject hook READS as its
+    # principle source (asserted on separately below). Coverage here is scoped to
+    # the two bootstrap write paths (aem-init scaffold + the read-only inject
+    # hook); aem-init writes only under planning\<slug>\, so this guard is a
+    # forward-regression tripwire should a future write path reach the repo root.
     $marker   = "OPERATOR-SENTINEL-" + ([Guid]::NewGuid().ToString('N'))
     $claudeMd = Join-Path $testRoot 'CLAUDE.md'
     Set-Content -LiteralPath $claudeMd -Value ("# Operator CLAUDE.md`n`n" + $marker + "`n") -Encoding UTF8
@@ -103,6 +110,15 @@ try {
     Assert -Condition ($aemExit -eq 0) -Name 'aem-init exits 0 in a clean repo' `
         -Detail ("expected exit 0, got {0}" -f $aemExit)
 
+    # Positive proof the aem-init scaffold WRITE path actually ran. Without this,
+    # the CLAUDE.md-untouched asserts below could pass vacuously (aem-init could
+    # early-exit having written nothing, and "unchanged" would be trivially true).
+    # aem-init -Slug scaffolds planning\<slug>\plan-state.md; assert it exists.
+    $scaffoldState = Join-Path $testRoot 'planning\sentinel-slug\plan-state.md'
+    Assert -Condition (Test-Path -LiteralPath $scaffoldState -PathType Leaf) `
+        -Name 'aem-init scaffold write path ran (plan-state.md created)' `
+        -Detail ("expected scaffold file at {0}" -f $scaffoldState)
+
     $afterMtime = (Get-Item -LiteralPath $claudeMd).LastWriteTimeUtc
     $afterHash  = (Get-FileHash -LiteralPath $claudeMd -Algorithm SHA256).Hash
     $afterText  = Get-Content -LiteralPath $claudeMd -Raw -Encoding UTF8
@@ -125,6 +141,30 @@ try {
     if ($null -ne $parsed) { $ctx = $parsed.hookSpecificOutput.additionalContext }
     Assert -Condition (-not [string]::IsNullOrWhiteSpace($ctx)) -Name 'additionalContext populated' `
         -Detail 'hookSpecificOutput.additionalContext was empty'
+
+    # A non-empty additionalContext is necessary but not sufficient: the hook's
+    # top-level catch (and its missing-template / unset-CLAUDE_PLUGIN_ROOT guards)
+    # emit a NON-EMPTY "[claude-context-inject] internal error: ..." envelope and
+    # still exit 0. The bare non-empty check above goes green on that broken-hook
+    # path -- so it cannot falsify the failure this test exists to detect. The two
+    # asserts below close that gap: reject the error envelope, and require the
+    # actual principle text from the template (the hook's read source, distinct
+    # from the protected operator CLAUDE.md sentinel above) to be present.
+    Assert -Condition ($ctx -notmatch 'internal error') `
+        -Name 'additionalContext is not an internal-error envelope' `
+        -Detail ("hook reported an internal error: {0}" -f $ctx)
+
+    # Tie the assertion to the live template content rather than a hardcoded
+    # string, so it stays valid if the template's wording changes but still
+    # falsifies a hook that failed to load/propagate the template. Use the
+    # template's first non-empty line as the marker.
+    $templateMarker = (Get-Content -LiteralPath $template -Encoding UTF8 |
+        Where-Object { $_.Trim().Length -gt 0 } | Select-Object -First 1)
+    if ($null -ne $templateMarker) { $templateMarker = $templateMarker.Trim() }
+    Assert -Condition ((-not [string]::IsNullOrWhiteSpace($templateMarker)) -and `
+            ($ctx -match [regex]::Escape($templateMarker))) `
+        -Name 'additionalContext carries the template principle text' `
+        -Detail ("expected template marker '{0}' in additionalContext" -f $templateMarker)
 }
 finally {
     Pop-Location
