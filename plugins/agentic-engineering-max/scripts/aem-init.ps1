@@ -17,6 +17,9 @@
 #          runtime), or (b) $env:CLAUDE_PLUGIN_ROOT\hooks does not exist
 #      on disk. Both mean "the plugin hooks dir cannot be resolved."
 #   4  unexpected internal error (top-level catch)
+#   5  PowerShell 7+ (pwsh) not resolvable on PATH, or reported version < 7.
+#      Emitted by the pre-config probe BEFORE any git config mutation, so a
+#      failed probe leaves core.hooksPath untouched.
 #
 # Conventions: ASCII-only inside double-quoted literals; git invocations send
 # stderr to $null (never the merge-into-stdout redirection form, which corrupts
@@ -34,6 +37,39 @@ try {
     if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($gitDir)) {
         [Console]::Error.WriteLine("[aem-init] error: not inside a git repository")
         exit 1
+    }
+
+    # --- 1.5 Probe: PowerShell 7+ (pwsh) must be resolvable on PATH -----------
+    # The plugin hooks run under pwsh (hooks.json targets the 'pwsh' command),
+    # so 'pwsh' must resolve on the PATH the hook shell will use. The current
+    # process being pwsh is NOT sufficient evidence -- a bare existence check
+    # (which pwsh / Get-Command) is a false-pass vector (guardrail 3). We invoke
+    # 'pwsh' as an EXTERNAL command and parse its reported major version,
+    # asserting >= 7. This runs strictly BEFORE any 'git config' mutation
+    # (D-S7), so a failed probe leaves core.hooksPath untouched.
+    $pwshMajor = $null
+    try {
+        $pwshVerRaw = & pwsh -NoProfile -NoLogo -Command '$PSVersionTable.PSVersion.Major' 2>$null
+        if ($LASTEXITCODE -eq 0) {
+            $verText = (($pwshVerRaw -join '') -replace '[^0-9]', '')
+            $parsed = 0
+            if (-not [string]::IsNullOrWhiteSpace($verText) -and [int]::TryParse($verText, [ref]$parsed)) {
+                $pwshMajor = $parsed
+            }
+        }
+    } catch {
+        # pwsh not found on PATH: the external-command invocation throws a
+        # CommandNotFoundException, which lands here. Leave $pwshMajor null.
+        $pwshMajor = $null
+    }
+
+    if ($null -eq $pwshMajor -or $pwshMajor -lt 7) {
+        [Console]::Error.WriteLine("[aem-init] error: PowerShell 7+ (pwsh) is required but was not found on PATH, or it reported a version below 7.")
+        [Console]::Error.WriteLine("[aem-init] The plugin hooks run under 'pwsh'; install PowerShell 7+ and ensure it is on PATH, then re-run.")
+        [Console]::Error.WriteLine("[aem-init]   Linux:   wget -qO- https://aka.ms/install-powershell.sh | sudo bash")
+        [Console]::Error.WriteLine("[aem-init]   macOS:   brew install --cask powershell")
+        [Console]::Error.WriteLine("[aem-init]   Windows: winget install --id Microsoft.PowerShell --source winget")
+        exit 5
     }
 
     # --- 2. Resolve the plugin hooks directory --------------------------------
