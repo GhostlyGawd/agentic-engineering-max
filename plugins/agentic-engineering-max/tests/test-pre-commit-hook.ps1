@@ -5,7 +5,7 @@
 # installed via core.hooksPath, then attempts a real `git commit` and
 # asserts the expected exit code + stderr substring.
 #
-# Run:    powershell -NoProfile -ExecutionPolicy Bypass -File tests\test-pre-commit-hook.ps1
+# Run:    pwsh -NoProfile -ExecutionPolicy Bypass -File tests\test-pre-commit-hook.ps1
 # Exit:   0 = all pass, 1 = at least one failed.
 #
 # Convention (D:\GitHub Projects\Dev_006\CLAUDE.md "Testing"): every bug

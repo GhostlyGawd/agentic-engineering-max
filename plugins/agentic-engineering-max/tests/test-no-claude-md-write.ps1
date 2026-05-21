@@ -18,7 +18,7 @@
 #      that the hook emitted valid JSON with a populated additionalContext.
 #   5. Clean up the temp repo and restore the parent's CLAUDE_PLUGIN_ROOT.
 #
-# Run:  powershell -NoProfile -ExecutionPolicy Bypass -File tests\test-no-claude-md-write.ps1
+# Run:  pwsh -NoProfile -ExecutionPolicy Bypass -File tests\test-no-claude-md-write.ps1
 # Exit: 0 = all assertions pass, 1 = at least one failed.
 #
 # Conventions (D:\GitHub Projects\Dev_006\CLAUDE.md "Testing"): plain .ps1, no
@@ -96,13 +96,13 @@ try {
     # --- (a) aem-init in the temp repo (child process; cwd pinned to temp repo).
     # --slug runs the scaffold write path; the slash command maps --slug -> -Slug.
     $aemCmd  = "Set-Location -LiteralPath '$testRoot'; & '$aemInit' -Slug 'sentinel-slug'"
-    $aemOut  = & powershell -NoProfile -ExecutionPolicy Bypass -Command $aemCmd
+    $aemOut  = & pwsh -NoProfile -ExecutionPolicy Bypass -Command $aemCmd
     $aemExit = $LASTEXITCODE
 
     # --- (b) SessionStart hook. Feed a JSON event on stdin (it calls ReadToEnd)
     # so the child does not block waiting for input; capture its stdout envelope.
     $hookCmd    = "Set-Location -LiteralPath '$testRoot'; & '$injectHook'"
-    $hookOut    = '{}' | & powershell -NoProfile -ExecutionPolicy Bypass -Command $hookCmd
+    $hookOut    = '{}' | & pwsh -NoProfile -ExecutionPolicy Bypass -Command $hookCmd
     $hookExit   = $LASTEXITCODE
     $hookOutStr = ($hookOut | Out-String).Trim()
 

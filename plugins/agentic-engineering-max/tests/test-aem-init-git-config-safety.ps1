@@ -16,7 +16,7 @@
 # its working directory inside the temp repo, and assert the exit code and the
 # resulting core.hooksPath value after each invocation.
 #
-# Run:    powershell -NoProfile -ExecutionPolicy Bypass -File tests\test-aem-init-git-config-safety.ps1
+# Run:    pwsh -NoProfile -ExecutionPolicy Bypass -File tests\test-aem-init-git-config-safety.ps1
 # Exit:   0 = all pass, 1 = at least one failed.
 #
 # Convention (D:\GitHub Projects\Dev_006\CLAUDE.md "Testing"): targeted,
@@ -100,7 +100,7 @@ try {
     # 2>$null discards the script's stderr (its conflict message); Out-Null
     # swallows the child's stdout. Neither uses the 2>&1 merge form.
     #
-    # The child powershell.exe writes its conflict message to stderr. On PS 5.1
+    # The child pwsh process writes its conflict message to stderr. On PS 5.1
     # a native exe's stderr is wrapped as a NativeCommandError record; under the
     # ambient $ErrorActionPreference='Stop' that record would TERMINATE the test
     # mid-run. Drop to 'Continue' around the child call (the sibling
@@ -111,7 +111,7 @@ try {
     $ErrorActionPreference = 'Continue'
     Push-Location $testRoot
     try {
-        & powershell -NoProfile -NoLogo -NonInteractive -ExecutionPolicy Bypass -File $scriptUnderTest 2>$null | Out-Null
+        & pwsh -NoProfile -NoLogo -NonInteractive -ExecutionPolicy Bypass -File $scriptUnderTest 2>$null | Out-Null
         $exitNoForce = $LASTEXITCODE
     } finally {
         Pop-Location
@@ -135,7 +135,7 @@ try {
     $ErrorActionPreference = 'Continue'
     Push-Location $testRoot
     try {
-        & powershell -NoProfile -NoLogo -NonInteractive -ExecutionPolicy Bypass -File $scriptUnderTest -Force 2>$null | Out-Null
+        & pwsh -NoProfile -NoLogo -NonInteractive -ExecutionPolicy Bypass -File $scriptUnderTest -Force 2>$null | Out-Null
         $exitForce = $LASTEXITCODE
     } finally {
         Pop-Location

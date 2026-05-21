@@ -5,7 +5,7 @@
 # the PM stale-lock sweep within the bounded window, and the task it guarded
 # MUST be reset to open so it can be re-claimed.
 #
-# Run:    powershell -NoProfile -ExecutionPolicy Bypass -File tests\test-atomic-claim-lock-reclamation.ps1
+# Run:    pwsh -NoProfile -ExecutionPolicy Bypass -File tests\test-atomic-claim-lock-reclamation.ps1
 # Exit:   0 = all pass, 1 = at least one failed.
 #
 # WHAT THIS TEST EXERCISES, AND WHY IT IS A SIMULATION

@@ -20,7 +20,7 @@
 #   5. the temp repo's CLAUDE.md mtime + SHA256 are unchanged post-invocation
 #      (proves the hook never wrote to the operator filesystem).
 #
-# Run:    powershell -NoProfile -ExecutionPolicy Bypass -File tests\test-session-start-injection.ps1
+# Run:    pwsh -NoProfile -ExecutionPolicy Bypass -File tests\test-session-start-injection.ps1
 # Exit:   0 = all pass, 1 = at least one failed.
 #
 # Convention (project CLAUDE.md "Testing" section): targeted,
@@ -104,7 +104,7 @@ try {
     $ErrorActionPreference = 'Continue'
     Push-Location $testRoot
     try {
-        $rawOut = '' | & powershell -NoProfile -NoLogo -NonInteractive -ExecutionPolicy Bypass -File $hookPath
+        $rawOut = '' | & pwsh -NoProfile -NoLogo -NonInteractive -ExecutionPolicy Bypass -File $hookPath
         $childExit = $LASTEXITCODE
     } finally {
         Pop-Location
