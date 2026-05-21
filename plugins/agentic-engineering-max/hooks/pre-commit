@@ -5,4 +5,18 @@
 # The real logic lives in hooks/pre-commit.ps1 to match the rest of
 # the Dev_006 toolchain (bin/*.ps1).
 set -e
-exec powershell -NoProfile -ExecutionPolicy Bypass -File "$(dirname "$0")/pre-commit.ps1"
+hook_ps1="$(dirname "$0")/pre-commit.ps1"
+# Prefer PowerShell Core (pwsh) where present (Linux/macOS/CI), but fall
+# back to Windows PowerShell (powershell/powershell.exe) on machines that
+# only ship PS 5.1. Without this fallback the shim hard-fails with
+# "exec: pwsh: not found" and halts every commit on a PS5.1-only host.
+if command -v pwsh >/dev/null 2>&1; then
+  exec pwsh -NoProfile -ExecutionPolicy Bypass -File "$hook_ps1"
+elif command -v powershell >/dev/null 2>&1; then
+  exec powershell -NoProfile -ExecutionPolicy Bypass -File "$hook_ps1"
+elif command -v powershell.exe >/dev/null 2>&1; then
+  exec powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$hook_ps1"
+else
+  echo "pre-commit: no PowerShell found on PATH (tried pwsh, powershell, powershell.exe)" >&2
+  exit 1
+fi
