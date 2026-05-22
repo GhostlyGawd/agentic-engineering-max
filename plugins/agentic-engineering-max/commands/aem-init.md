@@ -30,7 +30,7 @@ The slash command translates `--slug` to the backing script's `-Slug` parameter 
 - **2 — `core.hooksPath` conflict.** An existing non-default value is set and `--force` was not passed. The conflicting value is printed; re-run with `--force` to overwrite it.
 - **3 — plugin hooks directory unavailable.** Either `${CLAUDE_PLUGIN_ROOT}` is unset (you are not inside the plugin runtime) or `${CLAUDE_PLUGIN_ROOT}/hooks` does not exist on disk. Invoke from inside an installed Claude Code session.
 - **4 — unexpected internal error.** `git config` failed to write, or another error was caught. The error message is printed to stderr.
-- **5 — PowerShell 7+ (`pwsh`) not available.** The pre-config availability probe could not resolve `pwsh` on PATH, or it reported a version below 7. No `core.hooksPath` change was made. Install pwsh 7 per the Prerequisite hint above and re-run.
+- **5 — PowerShell 7+ (`pwsh`) not available.** The pre-config availability probe could not resolve `pwsh` on PATH, or it reported a version below 7. No `core.hooksPath` change was made. Install pwsh 7 per the Prerequisite section and re-run.
 
 **Uninstall / reverse:** the only persistent change to your repo is the git config key. Undo it with:
 
@@ -79,6 +79,17 @@ if [ -n "$FORCE" ]; then
 fi
 
 SCRIPT="$CLAUDE_PLUGIN_ROOT/scripts/aem-init.ps1"
+
+# Preflight: pwsh must resolve on PATH before we invoke it. Without this guard an
+# absent pwsh makes bash return 127 (command-not-found), which falls through to the
+# generic *) arm -- so the documented "exit 5 = pwsh not available" contract would
+# never fire in the very case it describes. Guard here so a missing pwsh exits 5.
+# (A pwsh present but below v7 is caught inside aem-init.ps1's probe, which also exits 5.)
+if ! command -v pwsh >/dev/null 2>&1; then
+  echo "[aem-init] PowerShell 7+ (pwsh) not available -- install pwsh 7 per the Prerequisite section and re-run." >&2
+  exit 5
+fi
+
 pwsh -NoProfile -ExecutionPolicy Bypass -Command "& '$SCRIPT' $PS_ARGS"
 CODE=$?
 
@@ -88,7 +99,7 @@ case "$CODE" in
   2) echo "[aem-init] core.hooksPath conflict -- re-run with --force to overwrite the existing value." >&2 ;;
   3) echo "[aem-init] plugin hooks dir unavailable -- run from inside an installed Claude Code session." >&2 ;;
   4) echo "[aem-init] internal error -- see the message above." >&2 ;;
-  5) echo "[aem-init] PowerShell 7+ (pwsh) not available -- install pwsh 7 per the Prerequisite hint and re-run." >&2 ;;
+  5) echo "[aem-init] PowerShell 7+ (pwsh) not available -- install pwsh 7 per the Prerequisite section and re-run." >&2 ;;
   *) echo "[aem-init] exited with code $CODE." >&2 ;;
 esac
 
