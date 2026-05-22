@@ -63,7 +63,7 @@ $plannedMd = @($staged | Where-Object { $_ -match '^planning/.*\.md$' })
 $specLintExit = 0
 if ($plannedMd.Count -gt 0) {
     $repoRoot = Split-Path -Parent $PSScriptRoot
-    $specLint = Join-Path $repoRoot 'bin/spec-lint.ps1'
+    $specLint = Join-Path $repoRoot 'scripts/spec-lint.ps1'
     if (Test-Path $specLint) {
         & $specLint @plannedMd
         $specLintExit = $LASTEXITCODE
@@ -80,7 +80,7 @@ $ccFiles = @($staged | Where-Object { $_ -match '\.(ps1|json)$' -or $_ -match '(
 $ccExit = 0
 if ($ccFiles.Count -gt 0) {
     $repoRootCc = Split-Path -Parent $PSScriptRoot
-    $ccLint = Join-Path $repoRootCc 'bin/crosscompat-lint.ps1'
+    $ccLint = Join-Path $repoRootCc 'scripts/crosscompat-lint.ps1'
     if (Test-Path $ccLint) {
         & $ccLint @ccFiles
         $ccExit = $LASTEXITCODE
