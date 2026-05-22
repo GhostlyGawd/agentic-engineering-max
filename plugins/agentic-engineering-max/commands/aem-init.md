@@ -30,6 +30,7 @@ The slash command translates `--slug` to the backing script's `-Slug` parameter 
 - **2 — `core.hooksPath` conflict.** An existing non-default value is set and `--force` was not passed. The conflicting value is printed; re-run with `--force` to overwrite it.
 - **3 — plugin hooks directory unavailable.** Either `${CLAUDE_PLUGIN_ROOT}` is unset (you are not inside the plugin runtime) or `${CLAUDE_PLUGIN_ROOT}/hooks` does not exist on disk. Invoke from inside an installed Claude Code session.
 - **4 — unexpected internal error.** `git config` failed to write, or another error was caught. The error message is printed to stderr.
+- **5 — PowerShell 7+ (`pwsh`) not available.** The pre-config availability probe could not resolve `pwsh` on PATH, or it reported a version below 7. No `core.hooksPath` change was made. Install pwsh 7 per the Prerequisite hint above and re-run.
 
 **Uninstall / reverse:** the only persistent change to your repo is the git config key. Undo it with:
 
@@ -39,7 +40,12 @@ git config --unset core.hooksPath
 
 (or point it back at the default with `git config core.hooksPath .git/hooks`). Then remove the plugin with `/plugin uninstall agentic-engineering-max@agentic-engineering-max`. No residual files are left in your repo.
 
-**Prerequisite:** this build system targets Windows with PowerShell 5.1 and Git for Windows. The backing script and hooks are PowerShell `.ps1` files invoked via `powershell.exe`.
+**Prerequisite:** this build system runs on Windows OR Linux and requires PowerShell 7 (`pwsh`) and git, both resolvable on PATH. The backing script and hooks are `.ps1` files invoked via `pwsh`. If `pwsh` is not installed, install it and re-run:
+
+```
+Linux:   wget -qO- https://aka.ms/install-powershell.sh | sudo bash
+Windows: winget install --id Microsoft.PowerShell --source winget
+```
 
 ```!
 ARGS="$ARGUMENTS"
@@ -73,7 +79,7 @@ if [ -n "$FORCE" ]; then
 fi
 
 SCRIPT="$CLAUDE_PLUGIN_ROOT/scripts/aem-init.ps1"
-powershell -NoProfile -ExecutionPolicy Bypass -Command "& '$SCRIPT' $PS_ARGS"
+pwsh -NoProfile -ExecutionPolicy Bypass -Command "& '$SCRIPT' $PS_ARGS"
 CODE=$?
 
 case "$CODE" in
@@ -82,6 +88,7 @@ case "$CODE" in
   2) echo "[aem-init] core.hooksPath conflict -- re-run with --force to overwrite the existing value." >&2 ;;
   3) echo "[aem-init] plugin hooks dir unavailable -- run from inside an installed Claude Code session." >&2 ;;
   4) echo "[aem-init] internal error -- see the message above." >&2 ;;
+  5) echo "[aem-init] PowerShell 7+ (pwsh) not available -- install pwsh 7 per the Prerequisite hint and re-run." >&2 ;;
   *) echo "[aem-init] exited with code $CODE." >&2 ;;
 esac
 
