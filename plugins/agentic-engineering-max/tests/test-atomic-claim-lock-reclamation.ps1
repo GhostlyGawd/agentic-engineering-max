@@ -163,7 +163,7 @@ function Run-Case {
     )
 
     $testRoot    = Join-Path $env:TEMP ("reclaim-test-{0}" -f (Get-Random))
-    $planningDir = Join-Path $testRoot 'planning\test-slug'
+    $planningDir = Join-Path $testRoot 'planning/test-slug'
     $tasksDir    = Join-Path $planningDir 'tasks'
     New-Item -ItemType Directory -Path $tasksDir -Force | Out-Null
 

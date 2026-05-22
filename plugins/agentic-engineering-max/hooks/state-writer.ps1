@@ -351,7 +351,7 @@ function Test-StaleGitIndexLock {
         [string]$RepoRoot,
         [int]$AgeThresholdSeconds = 30
     )
-    $lockPath = Join-Path $RepoRoot '.git\index.lock'
+    $lockPath = Join-Path $RepoRoot '.git/index.lock'
     if (-not (Test-Path $lockPath)) { return $null }
     $lockFile = Get-Item -LiteralPath $lockPath -ErrorAction SilentlyContinue
     if (-not $lockFile) { return $null }

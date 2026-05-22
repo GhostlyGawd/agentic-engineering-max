@@ -29,7 +29,7 @@ $ErrorActionPreference = 'Stop'
 
 # tests/ sits directly under the plugin dir; the script under test is a sibling.
 $pluginDir       = Split-Path -Parent $PSScriptRoot
-$scriptUnderTest = Join-Path $pluginDir 'scripts\aem-init.ps1'
+$scriptUnderTest = Join-Path $pluginDir 'scripts/aem-init.ps1'
 $pluginHooksDir  = Join-Path $pluginDir 'hooks'
 
 if (-not (Test-Path -LiteralPath $scriptUnderTest)) { Write-Host "FAIL: script under test missing at $scriptUnderTest"; exit 1 }

@@ -31,8 +31,8 @@ $ErrorActionPreference = 'Stop'
 
 # tests/ sits directly under the plugin dir; the hook + template are siblings.
 $pluginDir    = Split-Path -Parent $PSScriptRoot
-$hookPath     = Join-Path $pluginDir 'hooks\claude-context-inject.ps1'
-$templatePath = Join-Path $pluginDir 'docs\CLAUDE-template.md'
+$hookPath     = Join-Path $pluginDir 'hooks/claude-context-inject.ps1'
+$templatePath = Join-Path $pluginDir 'docs/CLAUDE-template.md'
 
 if (-not (Test-Path -LiteralPath $hookPath))     { Write-Host "FAIL: hook missing at $hookPath";         exit 1 }
 if (-not (Test-Path -LiteralPath $templatePath)) { Write-Host "FAIL: template missing at $templatePath"; exit 1 }

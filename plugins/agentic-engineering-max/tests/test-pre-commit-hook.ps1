@@ -17,8 +17,8 @@
 $ErrorActionPreference = 'Stop'
 
 $repoRoot     = Split-Path -Parent $PSScriptRoot
-$psHookPath   = Join-Path $repoRoot 'hooks\pre-commit.ps1'
-$bashHookPath = Join-Path $repoRoot 'hooks\pre-commit'
+$psHookPath   = Join-Path $repoRoot 'hooks/pre-commit.ps1'
+$bashHookPath = Join-Path $repoRoot 'hooks/pre-commit'
 
 if (-not (Test-Path $psHookPath))   { Write-Host "FAIL: $psHookPath missing";   exit 1 }
 if (-not (Test-Path $bashHookPath)) { Write-Host "FAIL: $bashHookPath missing"; exit 1 }
@@ -48,8 +48,8 @@ function Run-Test {
 
         # Install the hook under test
         New-Item -ItemType Directory -Path 'hooks' | Out-Null
-        Copy-Item $psHookPath   'hooks\pre-commit.ps1'
-        Copy-Item $bashHookPath 'hooks\pre-commit'
+        Copy-Item $psHookPath   'hooks/pre-commit.ps1'
+        Copy-Item $bashHookPath 'hooks/pre-commit'
         git config core.hooksPath hooks
 
         # Baseline empty commit so subsequent diffs work
@@ -112,13 +112,13 @@ function Run-Test {
 
 Run-Test -Name 'Ledger staged WITHOUT state -> BLOCKED with violation message' `
     -SetupStage {
-        New-Item -ItemType Directory -Path 'planning\test-slug' -Force | Out-Null
-        Set-Content 'planning\test-slug\plan-ledger.md' "initial`n" -Encoding UTF8
-        Set-Content 'planning\test-slug\plan-state.md'  "initial`n" -Encoding UTF8
+        New-Item -ItemType Directory -Path 'planning/test-slug' -Force | Out-Null
+        Set-Content 'planning/test-slug/plan-ledger.md' "initial`n" -Encoding UTF8
+        Set-Content 'planning/test-slug/plan-state.md'  "initial`n" -Encoding UTF8
         git add planning/test-slug/plan-state.md planning/test-slug/plan-ledger.md
         git commit -q -m 'seed planning files' --no-verify
 
-        Add-Content 'planning\test-slug\plan-ledger.md' "new entry"
+        Add-Content 'planning/test-slug/plan-ledger.md' "new entry"
         git add planning/test-slug/plan-ledger.md
     } `
     -ExpectedExit 1 `
@@ -126,26 +126,26 @@ Run-Test -Name 'Ledger staged WITHOUT state -> BLOCKED with violation message' `
 
 Run-Test -Name 'Ledger + state BOTH staged -> PASSES' `
     -SetupStage {
-        New-Item -ItemType Directory -Path 'planning\test-slug' -Force | Out-Null
-        Set-Content 'planning\test-slug\plan-ledger.md' "initial`n" -Encoding UTF8
-        Set-Content 'planning\test-slug\plan-state.md'  "initial`n" -Encoding UTF8
+        New-Item -ItemType Directory -Path 'planning/test-slug' -Force | Out-Null
+        Set-Content 'planning/test-slug/plan-ledger.md' "initial`n" -Encoding UTF8
+        Set-Content 'planning/test-slug/plan-state.md'  "initial`n" -Encoding UTF8
         git add planning/test-slug/plan-state.md planning/test-slug/plan-ledger.md
         git commit -q -m 'seed planning files' --no-verify
 
-        Add-Content 'planning\test-slug\plan-ledger.md' "new entry"
-        Add-Content 'planning\test-slug\plan-state.md'  "mirror update"
+        Add-Content 'planning/test-slug/plan-ledger.md' "new entry"
+        Add-Content 'planning/test-slug/plan-state.md'  "mirror update"
         git add planning/test-slug/plan-ledger.md planning/test-slug/plan-state.md
     } `
     -ExpectedExit 0
 
 Run-Test -Name 'State alone staged (no ledger touched) -> PASSES' `
     -SetupStage {
-        New-Item -ItemType Directory -Path 'planning\test-slug' -Force | Out-Null
-        Set-Content 'planning\test-slug\plan-state.md' "initial`n" -Encoding UTF8
+        New-Item -ItemType Directory -Path 'planning/test-slug' -Force | Out-Null
+        Set-Content 'planning/test-slug/plan-state.md' "initial`n" -Encoding UTF8
         git add planning/test-slug/plan-state.md
         git commit -q -m 'seed state file' --no-verify
 
-        Add-Content 'planning\test-slug\plan-state.md' "state-only edit"
+        Add-Content 'planning/test-slug/plan-state.md' "state-only edit"
         git add planning/test-slug/plan-state.md
     } `
     -ExpectedExit 0
@@ -160,17 +160,17 @@ Run-Test -Name 'Unrelated file change -> PASSES (no-op)' `
 Run-Test -Name 'Two slugs, only ONE violating -> BLOCKED naming only violator' `
     -SetupStage {
         foreach ($s in @('alpha-slug','beta-slug')) {
-            New-Item -ItemType Directory -Path "planning\$s" -Force | Out-Null
-            Set-Content "planning\$s\plan-ledger.md" "initial`n" -Encoding UTF8
-            Set-Content "planning\$s\plan-state.md"  "initial`n" -Encoding UTF8
+            New-Item -ItemType Directory -Path "planning/$s" -Force | Out-Null
+            Set-Content "planning/$s/plan-ledger.md" "initial`n" -Encoding UTF8
+            Set-Content "planning/$s/plan-state.md"  "initial`n" -Encoding UTF8
         }
         git add planning/alpha-slug/ planning/beta-slug/
         git commit -q -m 'seed two slugs' --no-verify
 
         # alpha: ledger + state BOTH (compliant). beta: ledger only (violator).
-        Add-Content 'planning\alpha-slug\plan-ledger.md' "entry"
-        Add-Content 'planning\alpha-slug\plan-state.md'  "mirror"
-        Add-Content 'planning\beta-slug\plan-ledger.md'  "entry"
+        Add-Content 'planning/alpha-slug/plan-ledger.md' "entry"
+        Add-Content 'planning/alpha-slug/plan-state.md'  "mirror"
+        Add-Content 'planning/beta-slug/plan-ledger.md'  "entry"
         git add planning/alpha-slug/plan-ledger.md planning/alpha-slug/plan-state.md planning/beta-slug/plan-ledger.md
     } `
     -ExpectedExit 1 `
@@ -181,16 +181,16 @@ Run-Test -Name 'Two slugs, only ONE violating -> BLOCKED naming only violator' `
 # is the signature of `git add -A` sweeping in another worker's edits.
 Run-Test -Name 'Two task-*.md files staged -> BLOCKED (wildcard-staging guard)' `
     -SetupStage {
-        New-Item -ItemType Directory -Path 'planning\swarm-slug\tasks' -Force | Out-Null
-        Set-Content 'planning\swarm-slug\tasks\task-006.md' "---`nstatus: open`n---`n" -Encoding UTF8
-        Set-Content 'planning\swarm-slug\tasks\task-016.md' "---`nstatus: open`n---`n" -Encoding UTF8
+        New-Item -ItemType Directory -Path 'planning/swarm-slug/tasks' -Force | Out-Null
+        Set-Content 'planning/swarm-slug/tasks/task-006.md' "---`nstatus: open`n---`n" -Encoding UTF8
+        Set-Content 'planning/swarm-slug/tasks/task-016.md' "---`nstatus: open`n---`n" -Encoding UTF8
         git add planning/swarm-slug/tasks/task-006.md planning/swarm-slug/tasks/task-016.md
         git commit -q -m 'seed two task files' --no-verify
 
         # Worker-C scenario: editing its own task-016 but `git add -A` also
         # sweeps in worker-A's mid-edit task-006.
-        Add-Content 'planning\swarm-slug\tasks\task-016.md' "work by worker-C"
-        Add-Content 'planning\swarm-slug\tasks\task-006.md' "mid-edit by worker-A"
+        Add-Content 'planning/swarm-slug/tasks/task-016.md' "work by worker-C"
+        Add-Content 'planning/swarm-slug/tasks/task-006.md' "mid-edit by worker-A"
         git add planning/swarm-slug/tasks/task-016.md planning/swarm-slug/tasks/task-006.md
     } `
     -ExpectedExit 1 `
@@ -198,12 +198,12 @@ Run-Test -Name 'Two task-*.md files staged -> BLOCKED (wildcard-staging guard)' 
 
 Run-Test -Name 'Single task-*.md file staged -> PASSES (normal worker tick)' `
     -SetupStage {
-        New-Item -ItemType Directory -Path 'planning\swarm-slug\tasks' -Force | Out-Null
-        Set-Content 'planning\swarm-slug\tasks\task-016.md' "---`nstatus: open`n---`n" -Encoding UTF8
+        New-Item -ItemType Directory -Path 'planning/swarm-slug/tasks' -Force | Out-Null
+        Set-Content 'planning/swarm-slug/tasks/task-016.md' "---`nstatus: open`n---`n" -Encoding UTF8
         git add planning/swarm-slug/tasks/task-016.md
         git commit -q -m 'seed one task file' --no-verify
 
-        Add-Content 'planning\swarm-slug\tasks\task-016.md' "work by worker-C"
+        Add-Content 'planning/swarm-slug/tasks/task-016.md' "work by worker-C"
         Set-Content 'plugin-deliverable.txt' "the actual deliverable" -Encoding UTF8
         git add planning/swarm-slug/tasks/task-016.md plugin-deliverable.txt
     } `

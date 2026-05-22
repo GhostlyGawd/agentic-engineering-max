@@ -63,10 +63,27 @@ $plannedMd = @($staged | Where-Object { $_ -match '^planning/.*\.md$' })
 $specLintExit = 0
 if ($plannedMd.Count -gt 0) {
     $repoRoot = Split-Path -Parent $PSScriptRoot
-    $specLint = Join-Path $repoRoot 'bin\spec-lint.ps1'
+    $specLint = Join-Path $repoRoot 'bin/spec-lint.ps1'
     if (Test-Path $specLint) {
         & $specLint @plannedMd
         $specLintExit = $LASTEXITCODE
+    }
+}
+
+# crosscompat-lint pass: scan staged PowerShell / hook / shim files for the
+# Windows-isms (literal-backslash paths, 'powershell' invocation, CRLF shims,
+# non-ASCII .ps1 literals, drive-letter absolute paths) that would break under
+# pwsh 7 on Linux. Keeps the codebase cross-platform on every commit -- the
+# enforcement layer that needs no Linux box. Findings print to stderr; the
+# script exits 1 on any. A genuine Windows-only line uses '# crosscompat-ok'.
+$ccFiles = @($staged | Where-Object { $_ -match '\.(ps1|json)$' -or $_ -match '(^|/)pre-commit$' -or $_ -match '\.sh$' })
+$ccExit = 0
+if ($ccFiles.Count -gt 0) {
+    $repoRootCc = Split-Path -Parent $PSScriptRoot
+    $ccLint = Join-Path $repoRootCc 'bin/crosscompat-lint.ps1'
+    if (Test-Path $ccLint) {
+        & $ccLint @ccFiles
+        $ccExit = $LASTEXITCODE
     }
 }
 
@@ -80,8 +97,8 @@ if ($plannedMd.Count -gt 0) {
 $stagedTaskFiles = @($staged | Where-Object { $_ -match '^planning/[^/]+/tasks/task-[^/]+\.md$' })
 $wildcardStaging = ($stagedTaskFiles.Count -ge 2)
 
-if ($violations.Count -eq 0 -and $specLintExit -eq 0 -and -not $wildcardStaging) { exit 0 }
-if ($violations.Count -eq 0 -and $specLintExit -ne 0) { exit 1 }
+if ($violations.Count -eq 0 -and $specLintExit -eq 0 -and $ccExit -eq 0 -and -not $wildcardStaging) { exit 0 }
+if ($violations.Count -eq 0 -and ($specLintExit -ne 0 -or $ccExit -ne 0)) { exit 1 }
 if ($violations.Count -eq 0 -and $wildcardStaging) {
     $bar = '=' * 64
     [Console]::Error.WriteLine('')

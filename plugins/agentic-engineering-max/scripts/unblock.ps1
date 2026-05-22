@@ -41,7 +41,7 @@ if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($repoRoot)) {
     exit 1
 }
 $repoRoot = $repoRoot.Trim()
-$taskFile = Join-Path $repoRoot ("planning\" + $Slug + "\tasks\task-" + $taskIdBare + ".md")
+$taskFile = Join-Path $repoRoot (Join-Path 'planning' (Join-Path $Slug (Join-Path 'tasks' ("task-" + $taskIdBare + ".md"))))
 
 if (-not (Test-Path $taskFile)) {
     [Console]::Error.WriteLine("ERROR: task file not found: $taskFile")

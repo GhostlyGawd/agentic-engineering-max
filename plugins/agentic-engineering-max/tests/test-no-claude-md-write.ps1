@@ -28,9 +28,9 @@ $ErrorActionPreference = 'Stop'
 
 # Plugin root is the parent of the tests dir (plugins\agentic-engineering-max).
 $pluginRoot = Split-Path -Parent $PSScriptRoot
-$aemInit    = Join-Path $pluginRoot 'scripts\aem-init.ps1'
-$injectHook = Join-Path $pluginRoot 'hooks\claude-context-inject.ps1'
-$template   = Join-Path $pluginRoot 'docs\CLAUDE-template.md'
+$aemInit    = Join-Path $pluginRoot 'scripts/aem-init.ps1'
+$injectHook = Join-Path $pluginRoot 'hooks/claude-context-inject.ps1'
+$template   = Join-Path $pluginRoot 'docs/CLAUDE-template.md'
 
 $script:passes   = 0
 $script:failures = 0
@@ -114,7 +114,7 @@ try {
     # the CLAUDE.md-untouched asserts below could pass vacuously (aem-init could
     # early-exit having written nothing, and "unchanged" would be trivially true).
     # aem-init -Slug scaffolds planning\<slug>\plan-state.md; assert it exists.
-    $scaffoldState = Join-Path $testRoot 'planning\sentinel-slug\plan-state.md'
+    $scaffoldState = Join-Path $testRoot 'planning/sentinel-slug/plan-state.md'
     Assert -Condition (Test-Path -LiteralPath $scaffoldState -PathType Leaf) `
         -Name 'aem-init scaffold write path ran (plan-state.md created)' `
         -Detail ("expected scaffold file at {0}" -f $scaffoldState)
