@@ -4,7 +4,7 @@
 # Discovers every sibling `test-*.ps1`, runs each as its own process, and
 # reports a per-test PASS/FAIL line plus a final tally.
 #
-# Run:    powershell -NoProfile -ExecutionPolicy Bypass -File tests\run-all-tests.ps1
+# Run:    pwsh -NoProfile -ExecutionPolicy Bypass -File tests\run-all-tests.ps1
 # Exit:   0 = all discovered tests passed, 1 = at least one failed (or none found).
 #
 # Conventions: ASCII-only literals; child tests are invoked as separate
@@ -24,7 +24,7 @@ $total = 0
 
 foreach ($t in $tests) {
     $total++
-    & powershell -NoProfile -ExecutionPolicy Bypass -File $t.FullName
+    & pwsh -NoProfile -ExecutionPolicy Bypass -File $t.FullName
     $code = $LASTEXITCODE
     if ($code -eq 0) {
         $pass++
