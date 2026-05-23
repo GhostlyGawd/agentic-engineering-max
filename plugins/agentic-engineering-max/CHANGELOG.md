@@ -4,6 +4,26 @@ All notable changes to `agentic-engineering-max` are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **`/aem-init`, `/board`, and `/unblock` now work when invoked.** They shipped
+  as slash *commands*, but `${CLAUDE_PLUGIN_ROOT}` is only substituted in *skill*
+  (and agent/hook/monitor/MCP) content -- never in command content -- so the
+  variable arrived empty, the backing-script path collapsed, and `/aem-init`
+  failed with a misleading "not a git repository". All three are now **skills**
+  (where the variable resolves inline), so they locate their scripts correctly.
+- **`pm`, `worker`, and `reviewer` no longer invoke the Windows-only
+  `powershell` exe** in their instructions -- they use `pwsh`, so the board and
+  the atomic-claim lock work on Linux as well as Windows.
+- `/aem-init` now emits a distinct "backing script not found" error (exit 4)
+  when the plugin root cannot be resolved, instead of mislabeling it exit-1
+  "not a git repository".
+- Regression test `tests/test-command-pluginroot.ps1` locks both contracts (no
+  `CLAUDE_PLUGIN_ROOT` reference under `commands/`; no `powershell` invocation in
+  any plugin `.md`) and runs in the 2-OS CI suite.
+
 ## [2.0.0] - 2026-05-23
 
 Cross-platform release. The plugin now runs on **Windows AND Linux** under a

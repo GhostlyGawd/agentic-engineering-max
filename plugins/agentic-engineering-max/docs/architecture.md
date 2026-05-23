@@ -114,16 +114,15 @@ PM has no loop cap and no claim mechanic. Workers and reviewers atomic-claim via
     pm/SKILL.md               # /pm skill body
     worker/SKILL.md           # /worker skill body
     reviewer/SKILL.md         # /reviewer skill body
+    aem-init/SKILL.md         # /aem-init: wire core.hooksPath + scaffold (pwsh-7 probe gate)
+    board/SKILL.md            # /board <slug>
+    unblock/SKILL.md          # /unblock <slug> T-NNN [--reset|--done]
   agents/                     # Build-system subagents (live mirror)
     epistemic-*.md            # 8 review/interview stances: bayesian, coherentist, empiricist,
                               #   falsificationist, hermeneut, phenomenologist, pragmatist, skeptic
     prd-writer.md             # Writes the PRD (spawned by the interviewer)
     spec-writer.md            # Writes the parallelization-maximized spec from the PRD
     wave-closer.md            # Closes an implementation wave; updates state surfaces
-  commands/
-    aem-init.md               # /aem-init: wire core.hooksPath + scaffold (pwsh-7 probe gate)
-    board.md                  # /board <slug> slash command
-    unblock.md                # /unblock <slug> T-NNN [--reset|--done] slash command
   settings.json               # Registers SessionEnd + SessionStart hooks
 ```
 

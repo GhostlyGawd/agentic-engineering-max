@@ -13,10 +13,10 @@
 # would have failed at the second layer.
 #
 # THE FIX (two layers, both locked here):
-#   - command bash block: resolve the root from ${CLAUDE_SKILL_DIR} (the
-#     documented render-time template) with a $CLAUDE_PLUGIN_ROOT fallback,
-#     verify the script exists, and pass the resolved root to the .ps1 as
-#     -PluginRoot. Fail with the CORRECT exit-3 diagnostic if neither resolves.
+#   - /aem-init is now a SKILL (not a command). Skill content substitutes
+#     ${CLAUDE_PLUGIN_ROOT} inline; slash-command content does not -- that was
+#     the bug. The skill bash block resolves the root, verifies the script
+#     exists, and passes the resolved root to the .ps1 as -PluginRoot.
 #   - aem-init.ps1: accept -PluginRoot (preferred), fall back to the env var,
 #     Resolve-Path-normalize it, exit 3 if it does not resolve to a real dir.
 #
@@ -31,12 +31,12 @@
 #            existing pwsh-probe test and direct invocation keep working).
 #     NEG-1  no -PluginRoot, env var CLEARED -> exit 3 (unset case).
 #     NEG-2  -PluginRoot pointing at a nonexistent path -> exit 3 (bad-path case).
-#   STATIC (command bash-block contract -- prevents silent regression):
-#     STAT-1 the command references ${CLAUDE_SKILL_DIR} (render-time fallback).
-#     STAT-2 the command passes -PluginRoot to the backing script.
-#     STAT-3 the command no longer hard-codes the bare
-#            SCRIPT="$CLAUDE_PLUGIN_ROOT/scripts/aem-init.ps1" sole-resolution
-#            line that caused the bug.
+#   STATIC (skill bash-block contract + migration -- prevents silent regression):
+#     STAT-1 the aem-init SKILL references ${CLAUDE_PLUGIN_ROOT} (substituted
+#            inline in skill content).
+#     STAT-2 the skill passes -PluginRoot to the backing script.
+#     STAT-3 the obsolete commands/aem-init.md is gone (command->skill migration
+#            locked; commands do not substitute the plugin-root variable).
 #
 # Run:    pwsh -NoProfile -ExecutionPolicy Bypass -File tests\test-aem-init-plugin-root.ps1
 # Exit:   0 = all pass, 1 = at least one failed.
@@ -50,11 +50,13 @@ $ErrorActionPreference = 'Stop'
 # tests/ sits directly under the plugin dir; the script + command are siblings.
 $pluginDir       = Split-Path -Parent $PSScriptRoot
 $scriptUnderTest = Join-Path $pluginDir 'scripts/aem-init.ps1'
-$commandFile     = Join-Path $pluginDir 'commands/aem-init.md'
+# /aem-init is now a SKILL, not a command (commands do not substitute the
+# plugin-root variable -- that was the bug; see the 2026-05-23 ledger entries).
+$skillFile       = Join-Path $pluginDir 'skills/aem-init/SKILL.md'
 $pluginHooksDir  = Join-Path $pluginDir 'hooks'
 
 if (-not (Test-Path -LiteralPath $scriptUnderTest)) { Write-Host "FAIL: script under test missing at $scriptUnderTest"; exit 1 }
-if (-not (Test-Path -LiteralPath $commandFile))     { Write-Host "FAIL: command file missing at $commandFile"; exit 1 }
+if (-not (Test-Path -LiteralPath $skillFile))       { Write-Host "FAIL: skill file missing at $skillFile"; exit 1 }
 if (-not (Test-Path -LiteralPath $pluginHooksDir -PathType Container)) { Write-Host "FAIL: plugin hooks dir missing at $pluginHooksDir"; exit 1 }
 
 # Resolve the real pwsh ONCE so we can spawn child processes with it explicitly.
@@ -207,21 +209,23 @@ try {
         -Detail ("expected unset, got '{0}'" -f $n2Hooks)
 
     # =====================================================================
-    # STATIC: lock the command bash-block contract against regression.
+    # STATIC: lock the command->skill migration + the skill bash-block contract.
+    # (The cross-cutting "no CLAUDE_PLUGIN_ROOT under commands/, no powershell in
+    # any .md" scan lives in test-command-pluginroot.ps1.)
     # =====================================================================
-    $cmd = Get-Content -Raw -LiteralPath $commandFile
+    $skill = Get-Content -Raw -LiteralPath $skillFile
 
-    Assert-True -Name 'STAT-1: command references ${CLAUDE_SKILL_DIR} (render-time fallback)' `
-        -Condition ($cmd -match '\$\{CLAUDE_SKILL_DIR\}') `
-        -Detail 'command bash block must resolve the root from the documented CLAUDE_SKILL_DIR template'
+    Assert-True -Name 'STAT-1: aem-init skill references ${CLAUDE_PLUGIN_ROOT} (substituted inline in skill content)' `
+        -Condition ($skill -match '\$\{CLAUDE_PLUGIN_ROOT\}') `
+        -Detail 'skill content -- unlike command content -- substitutes ${CLAUDE_PLUGIN_ROOT}; that is the fix'
 
-    Assert-True -Name 'STAT-2: command passes -PluginRoot to the backing script' `
-        -Condition ($cmd -match '-PluginRoot') `
+    Assert-True -Name 'STAT-2: skill passes -PluginRoot to the backing script' `
+        -Condition ($skill -match '-PluginRoot') `
         -Detail 'the resolved root must be passed explicitly so the .ps1 does not depend on env export'
 
-    Assert-True -Name 'STAT-3: command no longer hard-codes the bare $CLAUDE_PLUGIN_ROOT sole-resolution line' `
-        -Condition ($cmd -notmatch 'SCRIPT="\$CLAUDE_PLUGIN_ROOT/scripts/aem-init\.ps1"') `
-        -Detail 'the bare-env-var path was the original bug; it must not return'
+    Assert-True -Name 'STAT-3: the obsolete commands/aem-init.md is gone (migration locked)' `
+        -Condition (-not (Test-Path -LiteralPath (Join-Path $pluginDir 'commands/aem-init.md'))) `
+        -Detail 'aem-init was migrated command->skill; the command file must not return (commands do not substitute the plugin-root variable)'
 }
 finally {
     if ($null -eq $savedPluginRoot) {

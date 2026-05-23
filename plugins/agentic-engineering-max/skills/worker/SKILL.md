@@ -84,7 +84,7 @@ Lock path is the sibling of the task file, named from the task file's FILENAME S
 Issue this via Bash. The PowerShell expression must be ONE call:
 
 ```
-powershell -NoProfile -Command "try { $fs = [IO.File]::Open('<lock-path>', 'CreateNew', 'ReadWrite', 'None'); $body = 'worker_id: <worker_id>' + [Environment]::NewLine + 'claude_session_id: <session_id>' + [Environment]::NewLine + 'claimed_at: <ISO 8601 UTC>' + [Environment]::NewLine; $bytes = [Text.UTF8Encoding]::new($false).GetBytes($body); $fs.Write($bytes, 0, $bytes.Length); $fs.Flush(); $fs.Dispose(); exit 0 } catch { exit 1 }"
+pwsh -NoProfile -Command "try { $fs = [IO.File]::Open('<lock-path>', 'CreateNew', 'ReadWrite', 'None'); $body = 'worker_id: <worker_id>' + [Environment]::NewLine + 'claude_session_id: <session_id>' + [Environment]::NewLine + 'claimed_at: <ISO 8601 UTC>' + [Environment]::NewLine; $bytes = [Text.UTF8Encoding]::new($false).GetBytes($body); $fs.Write($bytes, 0, $bytes.Length); $fs.Flush(); $fs.Dispose(); exit 0 } catch { exit 1 }"
 ```
 
 (`UTF8Encoding($false)` = no BOM. This is the same encoding the rest of the build uses.)

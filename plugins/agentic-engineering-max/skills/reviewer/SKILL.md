@@ -56,7 +56,7 @@ claimed_at: <ISO 8601 UTC>
 Bash atomic create:
 
 ```
-powershell -NoProfile -Command "try { $fs = [IO.File]::Open('<lock-path>', 'CreateNew', 'ReadWrite', 'None'); $fs.Dispose(); exit 0 } catch { exit 1 }"
+pwsh -NoProfile -Command "try { $fs = [IO.File]::Open('<lock-path>', 'CreateNew', 'ReadWrite', 'None'); $fs.Dispose(); exit 0 } catch { exit 1 }"
 ```
 
 Exit code 1: contention. Skip to next candidate. Skip does NOT count toward the cap.
