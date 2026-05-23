@@ -12,10 +12,10 @@
 #   1  not inside a git repository
 #   2  core.hooksPath conflict (existing non-default, non-plugin value) and
 #      -Force was not passed
-#   3  plugin hooks directory unavailable -- two sub-cases share this code:
-#      (a) $env:CLAUDE_PLUGIN_ROOT is unset/empty (not run inside the plugin
-#          runtime), or (b) $env:CLAUDE_PLUGIN_ROOT\hooks does not exist
-#      on disk. Both mean "the plugin hooks dir cannot be resolved."
+#   3  plugin hooks directory unavailable -- the plugin root could not be
+#      resolved (neither -PluginRoot nor $env:CLAUDE_PLUGIN_ROOT yielded an
+#      existing directory), or <root>/hooks does not exist on disk. Both mean
+#      "the plugin hooks dir cannot be resolved."
 #   4  unexpected internal error (top-level catch)
 #   5  PowerShell 7+ (pwsh) not resolvable on PATH, or reported version < 7.
 #      Emitted by the pre-config probe BEFORE any git config mutation, so a
@@ -28,7 +28,13 @@
 [CmdletBinding()]
 param(
     [string]$Slug,
-    [switch]$Force
+    [switch]$Force,
+    # Plugin install root, passed in by the /aem-init slash command (which
+    # resolves it from the documented ${CLAUDE_SKILL_DIR} template, falling back
+    # to $CLAUDE_PLUGIN_ROOT). Explicit passing avoids relying on the env var
+    # being exported into a child pwsh process. When omitted (e.g. direct
+    # invocation or the probe test) the script falls back to the env var.
+    [string]$PluginRoot
 )
 
 try {
@@ -73,9 +79,23 @@ try {
     }
 
     # --- 2. Resolve the plugin hooks directory --------------------------------
-    $pluginRoot = $env:CLAUDE_PLUGIN_ROOT
+    # Prefer an explicitly-passed -PluginRoot (the /aem-init slash command
+    # resolves the root and passes it in, because $env:CLAUDE_PLUGIN_ROOT is not
+    # reliably exported into the command's bash block). Fall back to the env var
+    # so direct invocation (e.g. the pwsh-probe test) keeps working.
+    $pluginRoot = if (-not [string]::IsNullOrWhiteSpace($PluginRoot)) { $PluginRoot } else { $env:CLAUDE_PLUGIN_ROOT }
     if ([string]::IsNullOrWhiteSpace($pluginRoot)) {
-        [Console]::Error.WriteLine("[aem-init] error: CLAUDE_PLUGIN_ROOT is not set; run from inside the plugin runtime")
+        [Console]::Error.WriteLine("[aem-init] error: plugin root not provided via -PluginRoot and CLAUDE_PLUGIN_ROOT is unset; run from inside the plugin runtime")
+        exit 3
+    }
+
+    # Normalize: collapse any '..' segment from the command-dir-relative form
+    # (${CLAUDE_SKILL_DIR}/..) into a clean absolute path. A root that does not
+    # exist on disk is treated as unresolved (exit 3) -- same class as unset.
+    try {
+        $pluginRoot = (Resolve-Path -LiteralPath $pluginRoot -ErrorAction Stop).Path
+    } catch {
+        [Console]::Error.WriteLine("[aem-init] error: plugin root path does not exist: $pluginRoot")
         exit 3
     }
 
