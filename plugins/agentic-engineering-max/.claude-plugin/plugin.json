@@ -8,10 +8,7 @@
     "email": "rhenmcleod@gmail.com"
   },
   "homepage": "https://github.com/GhostlyGawd/agentic-engineering-max",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/GhostlyGawd/agentic-engineering-max"
-  },
+  "repository": "https://github.com/GhostlyGawd/agentic-engineering-max",
   "keywords": [
     "agentic",
     "build-system",
