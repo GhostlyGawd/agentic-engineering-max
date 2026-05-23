@@ -57,7 +57,7 @@ function Assert-True {
 }
 
 $savedPluginRoot = $env:CLAUDE_PLUGIN_ROOT
-$testRoot = Join-Path $env:TEMP ("session-inject-test-{0}" -f (Get-Random))
+$testRoot = Join-Path ([IO.Path]::GetTempPath()) ("session-inject-test-{0}" -f (Get-Random))
 New-Item -ItemType Directory -Path $testRoot | Out-Null
 
 try {

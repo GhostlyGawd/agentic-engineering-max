@@ -69,7 +69,7 @@ $expectedHooksValue = ($pluginDir -replace '\\', '/') + '/hooks'
 $sentinel           = 'tests/fake-hooks'
 
 $savedPluginRoot = $env:CLAUDE_PLUGIN_ROOT
-$testRoot = Join-Path $env:TEMP ("aem-test-{0}" -f ([guid]::NewGuid().ToString('N')))
+$testRoot = Join-Path ([IO.Path]::GetTempPath()) ("aem-test-{0}" -f ([guid]::NewGuid().ToString('N')))
 New-Item -ItemType Directory -Path $testRoot | Out-Null
 
 try {

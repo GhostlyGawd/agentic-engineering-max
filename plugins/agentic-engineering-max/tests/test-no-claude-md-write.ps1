@@ -59,7 +59,7 @@ foreach ($p in @($aemInit, $injectHook, $template)) {
     }
 }
 
-$testRoot        = Join-Path $env:TEMP ("no-claude-md-write-{0}" -f (Get-Random))
+$testRoot        = Join-Path ([IO.Path]::GetTempPath()) ("no-claude-md-write-{0}" -f (Get-Random))
 $savedPluginRoot = $env:CLAUDE_PLUGIN_ROOT
 New-Item -ItemType Directory -Path $testRoot | Out-Null
 

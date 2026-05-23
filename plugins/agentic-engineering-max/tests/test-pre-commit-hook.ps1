@@ -35,7 +35,7 @@ function Run-Test {
         [string]$ForbiddenStderrSubstring
     )
 
-    $testRoot = Join-Path $env:TEMP ("pre-commit-test-{0}" -f (Get-Random))
+    $testRoot = Join-Path ([IO.Path]::GetTempPath()) ("pre-commit-test-{0}" -f (Get-Random))
     New-Item -ItemType Directory -Path $testRoot | Out-Null
 
     try {
@@ -50,6 +50,10 @@ function Run-Test {
         New-Item -ItemType Directory -Path 'hooks' | Out-Null
         Copy-Item $psHookPath   'hooks/pre-commit.ps1'
         Copy-Item $bashHookPath 'hooks/pre-commit'
+        # On Linux/macOS git only runs a hook that carries the executable bit,
+        # and PowerShell's Copy-Item does NOT preserve it. Restore it so the
+        # copied shim actually fires (Windows git ignores the bit).
+        if (-not $IsWindows) { & chmod +x 'hooks/pre-commit' }
         git config core.hooksPath hooks
 
         # Baseline empty commit so subsequent diffs work
