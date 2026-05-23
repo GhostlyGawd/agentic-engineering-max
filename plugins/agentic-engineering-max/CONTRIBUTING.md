@@ -24,7 +24,7 @@ If you are unsure whether something is a bug or intended behavior, file it as a 
 
 ## Code style notes
 
-- **PowerShell 5.1 is the target.** PowerShell 7 is supported but not required. Avoid features added after 5.1 (pipeline chain `&&`/`||`, ternary, null-coalescing, `?.`) unless gated behind a version check.
+- **PowerShell 7 (`pwsh`) is the target.** All scripts, hooks, and tests must run under `pwsh` 7 on BOTH Windows and Linux; PowerShell 5.1 is no longer a target. Use `Join-Path` or forward slashes (never literal backslashes), invoke `pwsh` (never `powershell`), keep bash shims LF-only, and keep `.ps1` `"..."` literals ASCII-only. `crosscompat-lint.ps1` (wired into the pre-commit hook) enforces these on every commit; exempt a genuine Windows-only line with a trailing `# crosscompat-ok`.
 - **Python 3.12** where the project uses Python. Add `sys.stdout.reconfigure(encoding="utf-8")` early in any script that may print non-ASCII; Python on Windows defaults to cp1252.
 - **ASCII-only inside `.ps1` `"..."` string literals.** Em-dash, smart quotes, right-arrow get mis-decoded by PS5.1's cp1252 read into string terminators. Use `--`, `'`, `"`, `->`. Comments and `@"..."@` here-strings are safe; or save the file UTF-8-with-BOM.
 - **Parse-check every PowerShell script after editing.** `[Management.Automation.Language.Parser]::ParseFile($p,[ref]$null,[ref]$e); $e` -- silently-broken hooks look identical to non-firing hooks from the outside. Catching parse errors at edit time saves debugging.
