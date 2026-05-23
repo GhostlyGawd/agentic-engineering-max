@@ -110,10 +110,18 @@ PM has no loop cap and no claim mechanic. Workers and reviewers atomic-claim via
     state-writer-sweep.ps1    # SessionStart sweep: catches missed SessionEnd fires
     state-drift-check.ps1     # (existing) UserPromptSubmit drift detector
   skills/
+    plan-interviewer/SKILL.md # /plan-interviewer: scientific-method clarifying interview
     pm/SKILL.md               # /pm skill body
     worker/SKILL.md           # /worker skill body
     reviewer/SKILL.md         # /reviewer skill body
+  agents/                     # Build-system subagents (live mirror)
+    epistemic-*.md            # 8 review/interview stances: bayesian, coherentist, empiricist,
+                              #   falsificationist, hermeneut, phenomenologist, pragmatist, skeptic
+    prd-writer.md             # Writes the PRD (spawned by the interviewer)
+    spec-writer.md            # Writes the parallelization-maximized spec from the PRD
+    wave-closer.md            # Closes an implementation wave; updates state surfaces
   commands/
+    aem-init.md               # /aem-init: wire core.hooksPath + scaffold (pwsh-7 probe gate)
     board.md                  # /board <slug> slash command
     unblock.md                # /unblock <slug> T-NNN [--reset|--done] slash command
   settings.json               # Registers SessionEnd + SessionStart hooks
@@ -127,9 +135,19 @@ dogfooded (historical layout); in an installed plugin the scripts live under
 
 ```
 <dev-repo-root>/
-  bin/
+  bin/                        # Installed-plugin equivalent: ${CLAUDE_PLUGIN_ROOT}/scripts/
     build-board.ps1           # Regenerates task-board.md from per-task frontmatter
     board-print.ps1           # Stdout-print variant (used by /board command)
+    audit-claim-events.ps1    # Scans worker commits for Worker-ID trailers; flags double-assigns
+    audit-state-log.ps1       # Forensic analyzer for .state-auto-log (missed writer lines)
+    sweep-stale-locks.ps1     # Status-aware orphan-lock recovery (run per worker/reviewer tick)
+    spec-lint.ps1             # Planning-doc assertion-drift lint (char/task counts); pre-commit-wired
+    crosscompat-lint.ps1      # Cross-platform Windows-ism lint (paths, pwsh, LF, ASCII); pre-commit-wired
+    headless-worker-loop.ps1  # Drives `claude -p /worker <slug>` in a loop (walk-away builds)
+    headless-reviewer-loop.ps1 # Drives `claude -p /reviewer <slug>` in a loop
+    headless-pm-loop.ps1      # Drives `claude -p /pm <slug>` (singleton observer; optional)
+    unblock.ps1               # Inspect / reset / force-done an escalated task (backs /unblock)
+    gen-demo-assets.py        # Builds the plugin's demo GIF/screenshots (dev-only; not shipped)
   docs/
     build-system/
       overview.md             # This file
