@@ -10,7 +10,7 @@
       "name": "agentic-engineering-max",
       "source": "./plugins/agentic-engineering-max",
       "description": "Plan, build, review: a multi-agent engineering toolkit for Claude Code projects.",
-      "version": "2.0.0",
+      "version": "2.0.1",
       "category": "engineering",
       "keywords": [
         "agentic",
