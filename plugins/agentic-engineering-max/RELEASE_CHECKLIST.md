@@ -237,6 +237,52 @@ Pass criteria: every asset > size threshold AND every literal-text check above i
 - [ ] Edit the GitHub release draft to paste the CHANGELOG.md vX.Y.Z entry as the release notes body.
 - [ ] Publish the GitHub release.
 
+## Public hotfix (do NOT full-split while a future major is parked)
+
+This section is for patching an ALREADY-RELEASED line on the public repo (e.g. a broken manifest that blocks install) WITHOUT cutting a new release -- and specifically without dragging in unreleased work-in-progress.
+
+Why this exists: the `github`-source marketplace clones the public repo's DEFAULT BRANCH (`main`) HEAD, not the tag. So whatever sits on public `main` is what every installer gets. A full `git subtree split --prefix=plugin/` push to public `main` publishes the ENTIRE current `plugin/` tree -- including any unreleased next-major work (e.g. a cross-platform port) parked in the source tree behind an unmet gate. That would silently ship un-verified code to every installer under the frozen released-version banner.
+
+Worked precedent: 2026-05-23, the v1.0.0 `plugin.json` `repository`-as-object install-blocker. A `released-tag -> fresh-split-tip` diff showed 26 files would move; only 3 were intended. The fix was applied surgically instead.
+
+Procedure (surgical patch, NOT a subtree split):
+
+1. Land the fix at source first (Dev_006 `plugin/`), with its regression test, merged to Dev_006 `main`.
+
+2. Fresh-clone the public repo's release branch into a temp dir (a fresh clone has its own `.git` and no `core.hooksPath`, so the Dev_006 pre-commit hooks -- which reference a `bin/` absent from the flattened public tree -- do not interfere):
+
+    ```powershell
+    $tmp = Join-Path $env:TEMP ("aem-public-hotfix-" + (Get-Random))
+    git clone --quiet --branch main https://github.com/GhostlyGawd/agentic-engineering-max.git $tmp
+    ```
+
+3. For EACH intended file, confirm its diff vs the released base is exactly the intended change before copying it in. The authoritative check: the per-file `git diff <released-tag-or-base> <source-split-tip> -- <path>` (run in Dev_006) must contain ONLY the intended hunks -- no unreleased edits riding along. Then copy that file from the Dev_006 source tree into the matching path under `$tmp/plugins/agentic-engineering-max/`.
+
+4. Stage and CONFIRM the staged diff is exactly the intended file set (this is the gate against accidental over-publish):
+
+    ```powershell
+    git -C $tmp add -A
+    git -C $tmp diff --cached --stat   # must list ONLY the intended files
+    ```
+
+5. Commit and push to public `main`:
+
+    ```powershell
+    git -C $tmp commit -m "fix: <summary>"
+    git -C $tmp push origin main
+    ```
+
+6. Verify the live public `main` HEAD now carries the fix, then clean up:
+
+    ```powershell
+    git -C $tmp show HEAD:plugins/agentic-engineering-max/.claude-plugin/plugin.json
+    Remove-Item -Recurse -Force $tmp
+    ```
+
+7. Tell installers to refresh their local marketplace clone before re-installing: `/plugin marketplace update agentic-engineering-max` (or remove + re-add), then `/plugin install ...`. A stale local marketplace clone still holds the pre-fix copy.
+
+Consequence accepted: public `main` now diverges from the Dev_006 subtree history by this surgical commit. The next real `git subtree split` release reconciles it. This is the correct trade-off while a next-major is parked behind an unmet gate.
+
 ## Post-release smoke
 
 - [ ] Run the marketplace add+install flow once from a fresh test environment:
