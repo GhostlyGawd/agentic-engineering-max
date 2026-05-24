@@ -47,6 +47,39 @@ function Find-RepoRoot {
     return $null
 }
 
+# Heartbeat stamp (spec D-S1/D-S2). Write/refresh planning/<slug>/.locks/
+# heartbeats/<id>.beat at the TOP of each tick, pre-LLM, in pure pwsh. The
+# controller (T-003) reads these .beat mtimes for an atomic live-agent count and
+# reaps any older than heartbeat_ttl_seconds. OpenOrCreate (not CreateNew)
+# because the file legitimately persists across ticks; FileShare='None' still
+# serializes concurrent writers, and two stamps of an agent's own uniquely-named
+# file never collide. The mtime is bumped explicitly so the controller's TTL
+# reap keys on a guaranteed-fresh timestamp regardless of filesystem write-time
+# granularity. Advisory: a failure here must never abort the tick (mirrors the
+# sweep call's try/catch).
+function Write-Heartbeat {
+    param([string]$HeartbeatDir, [string]$Id)
+    try {
+        if (-not (Test-Path $HeartbeatDir)) {
+            New-Item -ItemType Directory -Path $HeartbeatDir -Force | Out-Null
+        }
+        $beatPath = Join-Path $HeartbeatDir ($Id + '.beat')
+        $body = $Id + ' ' + [DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ') + [Environment]::NewLine
+        $bytes = [Text.UTF8Encoding]::new($false).GetBytes($body)
+        $fs = [IO.File]::Open($beatPath, 'OpenOrCreate', 'ReadWrite', 'None')
+        try {
+            $fs.SetLength(0)
+            $fs.Write($bytes, 0, $bytes.Length)
+            $fs.Flush()
+        } finally {
+            $fs.Dispose()
+        }
+        (Get-Item $beatPath).LastWriteTimeUtc = [DateTime]::UtcNow
+    } catch {
+        # Advisory only -- never fatal to the tick.
+    }
+}
+
 $repoRoot = Find-RepoRoot
 # Fallback: anchor to this script's own location (bin/.. = repo root) so
 # the loop works regardless of where the operator launches it from. Same
@@ -70,6 +103,7 @@ $env:WORKER_ID = $WorkerId
 
 $planningDir = Join-Path (Join-Path $repoRoot 'planning') $Slug
 $locksDir    = Join-Path $planningDir '.locks'
+$heartbeatDir = Join-Path $locksDir 'heartbeats'
 $stopFile    = Join-Path $locksDir ($WorkerId + '.headless-stop')
 $boardPath   = Join-Path $planningDir 'task-board.md'
 $logDir      = Join-Path $repoRoot 'logs'
@@ -122,6 +156,11 @@ while ($tick -lt $MaxTicks) {
     Write-Host ''
     $ts = Get-Date -Format 'HH:mm:ss'
     Write-Host "===== Tick $tick at $ts =====" -ForegroundColor Cyan
+
+    # Pre-LLM heartbeat stamp (D-S2): refresh this agent's .beat at the top of
+    # the tick, before the blocking claude -p call, so the controller sees a
+    # fresh live-count for the whole duration of the tick.
+    Write-Heartbeat -HeartbeatDir $heartbeatDir -Id $WorkerId
 
     # Run claude -p with the worker prompt
     $tickStart = Get-Date
