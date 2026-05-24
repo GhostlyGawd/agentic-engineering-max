@@ -98,7 +98,7 @@ These are the only loud lines a quiet PM tick emits. Format `[HH:MM:SS] <prefix>
 
 - `tick: N open, N in_progress, N in_review, N done` — quiet-tick summary (no `!!` prefix).
 - `!! STALE LOCK: <worker_id> on T-NNN held N min; releasing` — D-S1 sweep release.
-- `!! BLOCKED: T-NNN depends on T-MMM which is not yet done` — only after 60 seconds of continued blockage.
+- `!! BLOCKED: T-NNN depends on T-MMM which is not yet done` — only after >=2 consecutive blocked ticks (Step 4 tick-count gate).
 - `!! ESCALATED: T-NNN hit 3-iter review cap; needs human eye. Reviewer's last feedback: <one-line>` — D-S7 surfacing.
 - `!! BOARD GEN FAILED: <stderr-line>` — build-board.ps1 non-zero exit.
 - `!! BOARD PARSE FAILED: missing section headers` — the board file exists but no expected section headers parsed (Step 6 gate). Distinguishes a malformed-but-present board from a generator failure. This line is reachable only via external tampering (manual edit, partial write, encoding corruption); the canonical `build-board.ps1` always emits either the six section headers or the `(no tasks yet)` sentinel.
