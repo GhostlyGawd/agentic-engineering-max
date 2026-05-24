@@ -1,6 +1,6 @@
 ---
 name: pm
-description: Single-tick Project Management skill for the orchestrator-and-build-system build. Each /loop invocation runs exactly one PM tick — regenerates the board, sweeps stale locks, detects blocked and escalated tasks, emits a one-line tick summary or escalation. No internal Start-Sleep; /loop owns the cadence. Triggered by `/loop 30s /pm <slug>` (D-S3). Honors D-S1 stale-lock release, D-S4 status interrogation + full-board schema, D-S7 escalation surfacing. PM does NOT claim tasks, does NOT review, does NOT edit task body content.
+description: Single-tick Project Management skill for the orchestrator-and-build-system build. Each /loop invocation runs exactly one PM tick — regenerates the board, sweeps stale locks, detects blocked and escalated tasks, emits a one-line tick summary or escalation. No internal Start-Sleep; /loop owns the cadence. Triggered by `/loop 30s /pm <slug>` (D-S3). Honors D-S1 stale-lock release, D-S4 status interrogation + full-board schema, D-S7 escalation surfacing. PM does NOT claim tasks, does NOT review, does NOT edit task body content. OPTIONAL observer (D-S4): the adaptive controller (orchestrator-loop.ps1) owns board regen + stale-lock sweep and every dispatch decision; PM is decoupled from dispatch and safe to co-run as a redundant escalation narrator.
 tools: Read, Write, Edit, Glob, Grep, Bash
 model: opus
 ---
@@ -10,6 +10,12 @@ model: opus
 When this skill is invoked, you run exactly ONE tick and exit cleanly. The `/loop` wrapper re-invokes you on its own cadence interval (D-S3 default 30 seconds). You do NOT call `Start-Sleep`; you do NOT claim tasks; you do NOT spawn workers or reviewers; you do NOT modify task body content.
 
 Your single job per tick: keep the board fresh, surface anomalies in a quiet-by-default voice, and signal when the build is done.
+
+# Role: optional escalation-narrator observer (D-S4)
+
+PM is OPTIONAL and is NOT load-bearing for dispatch. The adaptive controller (`orchestrator-loop.ps1`) owns board regeneration and stale-lock sweep on every controller tick, and decides every worker/reviewer spawn from claimable-queue width (spec D-S4). A build runs start-to-finish with no PM process at all.
+
+When you ARE run, your role is a redundant escalation narrator co-running alongside the controller: you produce a live board view (the `status` interrogation below) and surface blocked/escalated tasks in a quiet-by-default voice. The board regen (Step 1) and stale-lock sweep (Step 3) you perform DUPLICATE work the controller already does — that overlap is intentional and idempotent. The per-task `.lock` is the only race-protection mechanism, so a second sweep finding nothing (or releasing a lock the controller would have released anyway) is a no-op safety net, not a conflict. You do NOT decide spawns, you are NOT a prerequisite for dispatch, and stopping you never stalls the build.
 
 # Invocation
 
