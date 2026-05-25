@@ -147,12 +147,19 @@ if [ -n "$SLUG" ]; then
   fi
 fi
 
-# 6. TODO(T-006): tail-call the shared 4-check health routine here. T-006
-# creates scripts/aem-doctor.ps1 and REPLACES this TODO block with the real
-# tail call -- the doctor script run plainly (same invocation shape as the
-# scaffold call above, no policy-override flag), passing -PluginRoot
-# "$PLUGIN_ROOT". Until then, print a plain summary so the skill stays usable
-# standalone.
+# 6. Tail-call the shared 4-check health routine (T-006). The doctor is a
+# READ-ONLY report run with the plain -File shape and no policy-override flag,
+# passing -PluginRoot "$PLUGIN_ROOT". Its exit code is advisory: hooks are
+# already wired, so /aem-init succeeds regardless of what the doctor finds
+# (hence the '|| true'). The doctor needs pwsh; if pwsh is absent we skip it --
+# hooks are still wired -- and point the user at /aem-doctor for later.
+DOCTOR="$PLUGIN_ROOT/scripts/aem-doctor.ps1"
+if command -v pwsh >/dev/null 2>&1 && [ -f "$DOCTOR" ]; then
+  echo "[aem-init] running health check (/aem-doctor)..."
+  pwsh -NoProfile -File "$DOCTOR" -PluginRoot "$PLUGIN_ROOT" || true
+else
+  echo "[aem-init] skipped health check: pwsh not found on PATH. Run /aem-doctor once pwsh 7 is installed." >&2
+fi
 
 echo "[aem-init] done -- run /aem-doctor any time to re-check this repo's setup."
 exit 0
