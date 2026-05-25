@@ -49,5 +49,5 @@ if ! command -v pwsh >/dev/null 2>&1; then
   exit 5
 fi
 
-pwsh -NoProfile -ExecutionPolicy Bypass -File "$SCRIPT" "$SLUG" "$TASK_ID" "$FLAG"
+pwsh -NoProfile -File "$SCRIPT" "$SLUG" "$TASK_ID" "$FLAG"
 ```
