@@ -4,6 +4,34 @@ All notable changes to `agentic-engineering-max` are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - 2026-05-25
+
+### Added
+
+- **`/aem-doctor` health-check skill** plus a shared health-check routine that
+  `/aem-init` calls at the end of bootstrap. It verifies the environment
+  (`pwsh` 7+, git repo, `core.hooksPath`, execution policy) and prints a
+  plain-English line per check.
+- **Restricted-policy detection.** When the machine's PowerShell execution
+  policy would block the hooks, `/aem-doctor` surfaces ONE plain-English
+  sentence plus a fix command (or "ask IT") instead of failing silently -- no
+  string-exec / IEX evasion.
+- **EBUSY first-run install note** on the marketplace surface and README, so a
+  fresh `/aem-init` that races a file lock has a documented retry path.
+- **`.md`-scan lint rule** in `crosscompat-lint.ps1`: the no-`powershell`-exe
+  and no-`-ExecutionPolicy Bypass` checks now also scan plugin `.md` content,
+  with matching regression cases in both test copies.
+
+### Changed
+
+- **`/aem-init` is now git-native** -- it bootstraps via git plumbing rather
+  than the prior path, and ends by invoking the shared health check.
+- **All skills, hooks, and bash shims drop `-ExecutionPolicy Bypass`.** They
+  invoke `pwsh -NoProfile -File ...` with no policy override, removing the
+  malware-lookalike AMSI/EDR signature. Hooks run with plain `-File`.
+- **`/aem-init` exit-code surface simplified (D-S1):** exit codes are 0/1/2/3/4;
+  exit 5 is no longer documented as a gate.
+
 ## [2.0.1] - 2026-05-23
 
 ### Fixed
