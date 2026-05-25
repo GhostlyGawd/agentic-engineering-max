@@ -30,6 +30,21 @@ nothing -- it only inspects.
 Each check prints one status line; anything that fails also prints one concrete
 fix line. A final summary line says either "all good" or what to fix.
 
+> **A nonzero exit is advisory, not an error.** The backing script exits 1 when
+> it has fixes to suggest (and 0 when all four checks pass). That exit 1 means
+> "here are things to fix", not "the health check itself failed" -- nothing was
+> mutated either way.
+
+> **If you see "running scripts is disabled" instead of the report.** This skill
+> runs the doctor as a `.ps1` via `pwsh -NoProfile -File` with no
+> policy-override flag (no Bypass) -- the same no-override invocation the rest of
+> the plugin uses. So if your machine's execution policy blocks local scripts
+> (Restricted / AllSigned), the host refuses to load the doctor and you get that
+> error instead of the four-check report. That error IS the diagnosis check (d)
+> would have printed: fix it with
+> `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` (or ask your IT admin if
+> the policy is locked at the machine scope) and re-run `/aem-doctor`.
+
 ```!
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"
 if [ -z "$PLUGIN_ROOT" ]; then

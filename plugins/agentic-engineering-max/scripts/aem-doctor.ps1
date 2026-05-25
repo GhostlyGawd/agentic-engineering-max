@@ -11,13 +11,26 @@
 #                               <plugin-root>/hooks.
 #   (d) can scripts run?     -- effective execution policy read via a benign
 #                               INLINE child 'pwsh -Command "(Get-ExecutionPolicy)"'.
-#                               This probe loads NO script file, so the policy
-#                               can be reported even where script files are
-#                               blocked. It uses no dynamic-eval cmdlet, no
+#                               This PROBE (and only this probe) loads NO script
+#                               file, so it can read and classify the policy
+#                               VALUE even when that value is one that blocks
+#                               .ps1 files. It uses no dynamic-eval cmdlet, no
 #                               policy-override flag, and loads no .ps1.
 #
-# The routine always runs all four checks to completion and prints a final
-# one-line summary ("all good" or an N-things-to-fix line).
+# Scope note (the loads-no-script-file property is the probe's, not the whole
+# routine's): this routine is itself a .ps1, invoked by both /aem-doctor and
+# /aem-init via the plain 'pwsh -NoProfile -File' shape with no policy-override
+# flag -- the same no-override invocation the rest of the v2.1.0 plugin uses.
+# So the host process needs a policy that permits local scripts (RemoteSigned /
+# Unrestricted / Bypass) for the routine to start at all. On a box whose policy
+# is Restricted/AllSigned the host refuses to load this file and the user sees a
+# "running scripts is disabled" error instead of the report -- the fix for which
+# is exactly what check (d) would have printed (Set-ExecutionPolicy ...). The
+# /aem-doctor SKILL documents that error path. Once the routine DOES start, it
+# always runs all four checks to completion -- and because check (d)'s probe is
+# inline, it can still surface a blocking policy VALUE (e.g. when policy varies
+# by scope and a permissive scope let the host start while a different scope is
+# blocking). A final one-line summary follows ("all good" or N-things-to-fix).
 #
 # Exit codes:
 #   0  all four checks passed (healthy setup).
@@ -133,18 +146,37 @@ try {
 }
 
 # Policies that block running local scripts. RemoteSigned / Unrestricted /
-# Bypass do not block local scripts; Undefined resolves to a default elsewhere.
+# Bypass do not block local scripts. 'Undefined' means no policy is set at any
+# scope and the effective behavior falls to the host default -- on Windows
+# CLIENT SKUs that default is Restricted, so Undefined is a soft-warn (it may
+# block), not a clean OK.
 $blockingPolicies = @('Restricted', 'AllSigned')
 
 if ($null -eq $policy -or $policy -eq "") {
-    # Could not read the policy (typically because pwsh is missing -- already
-    # surfaced by check (b)). Report it but do not double-count as an issue and
-    # do not emit a second fix command.
-    Write-Host "[aem-doctor] (d) script execution: could not read the execution policy (is pwsh installed? see check b)"
+    if ($null -ne $pwshVer) {
+        # pwsh IS present (check b found a version) yet the policy probe returned
+        # nothing -- that is anomalous (a broken/locked-down child invocation),
+        # so count it: a box where we cannot even confirm scripts will run is not
+        # a verified-healthy box.
+        Write-Host "[aem-doctor] (d) script execution: could not read the execution policy even though pwsh is present."
+        Write-Host "[aem-doctor]     fix: run 'pwsh -NoProfile -Command (Get-ExecutionPolicy)' by hand to see why the probe failed."
+        $issues.Add("execution policy unreadable (pwsh present)")
+    } else {
+        # pwsh is absent -- already surfaced by check (b). Report but do not
+        # double-count and do not emit a second fix command.
+        Write-Host "[aem-doctor] (d) script execution: could not read the execution policy (is pwsh installed? see check b)"
+    }
 } elseif ($blockingPolicies -contains $policy) {
     Write-Host ("[aem-doctor] (d) script execution: BLOCKED -- the current execution policy ({0}) prevents scripts from running." -f $policy)
     Write-Host "[aem-doctor]     fix: Set-ExecutionPolicy -Scope CurrentUser RemoteSigned   (or ask your IT admin if policy is locked down)."
     $issues.Add("scripts blocked by execution policy")
+} elseif ($policy -eq 'Undefined') {
+    # Soft-warn: no policy set at any scope; the host default decides, and on
+    # Windows client SKUs that default is Restricted. One caution sentence plus
+    # one fix line -- not counted as a hard issue (it MAY be fine on a server SKU
+    # or where a parent scope is permissive).
+    Write-Host "[aem-doctor] (d) script execution: NO policy set (Undefined) -- the host default applies and on Windows client machines that default blocks scripts."
+    Write-Host "[aem-doctor]     fix (if scripts fail): Set-ExecutionPolicy -Scope CurrentUser RemoteSigned."
 } else {
     Write-Host ("[aem-doctor] (d) script execution: OK (policy: {0})" -f $policy)
 }
