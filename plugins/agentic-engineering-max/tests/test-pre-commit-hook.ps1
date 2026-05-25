@@ -114,6 +114,19 @@ function Run-Test {
 # Tests
 # -----------------------------------------------------------------------
 
+# Shim hygiene (T014): the de-Bypassed shim (T005) must carry zero
+# -ExecutionPolicy Bypass tokens. The shim now invokes pwsh on the default
+# ExecutionPolicy; a reintroduced Bypass would silently mask a future policy
+# regression. Asserted against the source shim every Run-Test installs.
+$shimText = Get-Content $bashHookPath -Raw
+if ($shimText -match '-ExecutionPolicy\s+Bypass') {
+    Write-Host "FAIL: shim hooks/pre-commit still contains -ExecutionPolicy Bypass"
+    $script:failures++
+} else {
+    Write-Host "PASS: shim hooks/pre-commit contains no -ExecutionPolicy Bypass"
+    $script:passes++
+}
+
 Run-Test -Name 'Ledger staged WITHOUT state -> BLOCKED with violation message' `
     -SetupStage {
         New-Item -ItemType Directory -Path 'planning/test-slug' -Force | Out-Null
