@@ -22,6 +22,9 @@
 #                       bytes -- a CRLF shebang silently breaks under Linux bash.
 #   non-ascii-literal : a non-ASCII char inside a .ps1 "..." double-quoted
 #                       literal (PS5.1 cp1252 hazard; ASCII-only discipline).
+#   windowstyle-startprocess : the Windows-only '-WindowStyle' parameter on
+#                       Start-Process (Linux pwsh throws). Pass it conditionally
+#                       via a splat under an $IsWindows guard.
 #
 # Any flagged line can be exempted with a trailing '# crosscompat-ok' comment
 # (genuinely Windows-only code, or a false positive -- the comment documents why).
@@ -68,7 +71,16 @@ $files = @($files | Sort-Object FullName -Unique)
 $findings = New-Object System.Collections.Generic.List[string]
 
 foreach ($f in $files) {
-    $rel = $f.FullName.Substring($repoRoot.Length).TrimStart('\', '/').Replace('\', '/')
+    # $rel is display-only. A scanned file can live OUTSIDE $repoRoot -- a caller
+    # may pass an absolute path under [IO.Path]::GetTempPath() (the regression
+    # test does exactly this). A blind Substring($repoRoot.Length) throws when the
+    # path is shorter than repoRoot, so guard the prefix-strip and fall back to the
+    # full normalized path.
+    if ($f.FullName.StartsWith($repoRoot, [StringComparison]::OrdinalIgnoreCase)) {
+        $rel = $f.FullName.Substring($repoRoot.Length).TrimStart('\', '/').Replace('\', '/')
+    } else {
+        $rel = $f.FullName.Replace('\', '/')
+    }
     $isPs   = ($f.Extension -eq '.ps1')
     $isJson = ($f.Extension -eq '.json')
     $isMd   = ($f.Extension -eq '.md')
@@ -135,6 +147,19 @@ foreach ($f in $files) {
         # install-powershell.sh) are NOT flagged.
         if (-not $isMd -and $line -match '(?i)(&\s*|exec\s+|-FilePath\s+[''"]?|FilePath\s+[''"]?|"command"\s*:\s*"[^"]*\s)powershell(\.exe)?\b') {
             $findings.Add("powershell-invoke ${rel}:${lineNo}: invokes Windows-only 'powershell' -- use 'pwsh' (or # crosscompat-ok)")
+        }
+
+        # windowstyle-startprocess: the '-WindowStyle' parameter is Windows-only;
+        # Linux/macOS pwsh throws "The parameter '-WindowStyle' is not supported
+        # for the cmdlet 'Start-Process' on this edition of PowerShell". Pass it
+        # conditionally via a splat (if ($IsWindows) { $a['WindowStyle']='Hidden' })
+        # -- which uses the bareword key, not the '-WindowStyle' parameter token,
+        # so this check (the leading-dash form) flags only the unsafe invocation.
+        # Regex written as '-WindowStyl[e]' (char class on the final letter) so
+        # this detector line does not flag ITSELF when the lint scans its own
+        # source -- it still matches a real '-WindowStyle' parameter elsewhere.
+        if ($isPs -and -not $isCommentLine -and $line -match '-WindowStyl[e]\b') {
+            $findings.Add("windowstyle-startprocess ${rel}:${lineNo}: '-WindowStyle' is Windows-only on Start-Process -- pass it conditionally via a splat (`$IsWindows guard) or # crosscompat-ok")
         }
 
         # non-ascii-literal: non-ASCII char inside a .ps1 "..." literal.
