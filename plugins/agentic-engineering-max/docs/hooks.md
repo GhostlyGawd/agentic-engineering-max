@@ -4,6 +4,20 @@ This document describes the three PowerShell hooks used in the build system. Hoo
 
 ---
 
+## How hooks are invoked (plain `pwsh -File`, no `-ExecutionPolicy Bypass`)
+
+Every hook -- both the plugin's `hooks.json` entries (run by Claude Code's hook runner) and the git `pre-commit` shim (run by git) -- invokes its `.ps1` with the plain form:
+
+```text
+pwsh -NoProfile -File <hook>.ps1
+```
+
+There is no `-ExecutionPolicy Bypass` flag anywhere in the hook surface. That flag was only ever solving a **mark-of-the-web (MOTW)** problem -- the `Zone.Identifier` alternate-data-stream Windows attaches to files *downloaded from the internet*, which `RemoteSigned` then refuses to run without an override. But the plugin's files are not downloaded; Claude Code installs the plugin via a **clean git clone**, and git-written files carry **no MOTW stream**. Empirically verified: under the Windows default execution policy (`RemoteSigned`), a clean local `.ps1` runs with plain `-File` and exits 0 -- only an MOTW-tagged file is blocked.
+
+So dropping `-ExecutionPolicy Bypass` costs **zero functionality** on a normal machine: the hooks run identically. What the flag *did* cost was a classifier-hostile command shape (`pwsh ... -ExecutionPolicy Bypass ... .ps1` reads like the evasion pattern malware uses) and a maintenance trap. Removing it is strictly better. The one machine where scripts genuinely will not run -- a `Restricted` / `AllSigned` box locked down by IT policy -- is handled at setup time by `/aem-doctor`, which detects the policy via a benign inline probe and prints the one-line fix rather than letting a hook fail with a raw "running scripts is disabled" wall. The plugin never circumvents a locked-down posture; it fails cleanly and legibly.
+
+---
+
 ## state-writer.ps1 (SessionEnd)
 
 **Path:** `~/.claude/hooks/state-writer.ps1`

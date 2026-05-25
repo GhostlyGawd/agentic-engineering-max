@@ -1,8 +1,87 @@
 # Skills reference
 
-This document is the per-skill reference for the three build-system skills: `/pm`, `/worker`, and `/reviewer`. Each skill runs as a single-tick loop role invoked via `/loop` in its own Claude Code session. For the end-user launch procedure, see [RUN_BOOK.md](../../planning/orchestrator-and-build-system/RUN_BOOK.md). For architecture, see [overview.md](overview.md).
+This document is the per-skill reference for the plugin's skills: the two setup skills (`/aem-init`, `/aem-doctor`) that wire and check a repo, and the three build-system loop skills (`/pm`, `/worker`, `/reviewer`) that run the build. The setup skills run once (or any time, for the doctor); the build-system skills run as single-tick loop roles invoked via `/loop`, each in its own Claude Code session. For the end-user launch procedure, see [RUN_BOOK.md](../../planning/orchestrator-and-build-system/RUN_BOOK.md). For architecture, see [overview.md](overview.md).
 
-The canonical invocation bodies live in the installed SKILL.md files at `~/.claude/skills/<name>/SKILL.md`. This document cross-links and summarizes; it does not duplicate the full procedure.
+The canonical invocation bodies live in the installed `SKILL.md` files (`~/.claude/skills/<name>/SKILL.md` for build-system skills; the plugin's `skills/<name>/SKILL.md` for `/aem-init` and `/aem-doctor`). This document cross-links and summarizes; it does not duplicate the full procedure.
+
+---
+
+## /aem-init
+
+**Purpose:** One-time bootstrap. Wires the plugin's git pre-commit hook into the current repo and prints a next-action summary. Run it once, right after installing the plugin, from inside the git repository you want to enable.
+
+### Invocation
+
+```text
+/aem-init [--slug <name>] [--force]
+```
+
+- `--slug <name>` -- also scaffold `planning/<name>/` with stub `plan-state.md` + `plan-ledger.md` state surfaces. Single kebab-case token. Omit to wire hooks only.
+- `--force` -- overwrite an existing non-default `core.hooksPath`. Without it, a conflicting value is left untouched (Invariant-1 no-silent-clobber).
+
+### What it does
+
+1. Confirms the current directory is a git repository.
+2. Sets `git config core.hooksPath` to the plugin's `hooks/` directory (wires the pre-commit state-mirror hook). No files are copied into `.git/hooks/`.
+3. Optionally scaffolds `planning/<slug>/` when `--slug` is passed.
+4. Tail-calls the shared 4-check health routine (`/aem-doctor`) and prints a next-action summary.
+
+The core action -- wiring `core.hooksPath` -- is **plain git**: it needs no PowerShell. Only `--slug` scaffolding and the health-check tail use `pwsh`; if `pwsh` is absent those steps are skipped and the hooks are still wired.
+
+### Exit codes (D-S1)
+
+| Code | Meaning |
+|---|---|
+| **0** | Success. Hooks wired (`core.hooksPath` set); optional `--slug` scaffolded; health check ran. |
+| **1** | Not inside a git repository. Run from your repo root, or `git init` first. |
+| **2** | `core.hooksPath` conflict -- an existing non-default value is set and `--force` was not passed. |
+| **3** | Plugin root could not be resolved (not running inside the plugin runtime), or the plugin `hooks/` directory does not exist on disk. |
+| **4** | Internal error, or (with `--slug`) the scaffolding step failed. Any nonzero scaffold exit maps to 4. |
+
+There is no exit-5 gate: PowerShell presence is no longer a precondition for setup, so a missing `pwsh` does not fail `/aem-init` (the health-check tail just reports it and points you at `/aem-doctor`).
+
+### EBUSY on install -- just retry
+
+If a `/plugin marketplace add` or `/plugin install` step failed with an **EBUSY (file busy)** error, just retry it -- it is a transient file-lock during install, not a real failure. Once the plugin is installed, run `/aem-init` in your repo as above.
+
+### Reverse
+
+The only persistent change to your repo is the git config key. Undo it with `git config --unset core.hooksPath`.
+
+---
+
+## /aem-doctor
+
+**Purpose:** Read-only health check. Runs four checks against the current repo and reports, in plain English, what is set up and what (if anything) needs fixing. Mutates nothing -- it only inspects.
+
+### Invocation
+
+```text
+/aem-doctor
+```
+
+No flags, no env-vars. Run it any time -- after `/aem-init` to confirm the repo is ready, or later to diagnose why hooks are not firing.
+
+### The four checks
+
+| # | Check | If it fails |
+|---|---|---|
+| 1 | **git repo?** -- are we inside a git repository? | Run from your repo root, or `git init` first. |
+| 2 | **PowerShell 7 present?** -- is `pwsh` (v7+) on PATH? The plugin hooks and scripts run under it. | Install PowerShell 7. |
+| 3 | **hooks wired?** -- does `core.hooksPath` point at the plugin's `hooks/` directory? | Run `/aem-init`. |
+| 4 | **can scripts run here?** -- is the execution policy permissive enough to load the plugin's `.ps1` scripts? | Allow local scripts (see below). |
+
+Each check prints one status line; anything that fails also prints one concrete fix line. A final summary line says either "all good" or what to fix.
+
+### When to run it
+
+- Right after `/aem-init`, to confirm the repo is ready.
+- Any time hooks seem not to fire, or after changing machines / PowerShell installs.
+
+### Notes
+
+- **A nonzero exit is advisory, not an error.** The backing check exits 1 when it has fixes to suggest and 0 when all four pass. Nothing is mutated either way.
+- **Locked-down machines get a clear message, not a wall.** Check 4 reads the effective execution policy via a benign inline policy probe (an inline `pwsh -Command "(Get-ExecutionPolicy)"` is never gated by the policy, so it answers even where loading a `.ps1` would be refused). If scripts are blocked (`Restricted` / `AllSigned`), it prints one plain status line plus the fix -- `pwsh -Command "Set-ExecutionPolicy -Scope CurrentUser RemoteSigned"`, or ask your IT admin if the policy is locked at machine scope -- and stops without loading any script file. You never see a raw "running scripts is disabled" wall.
 
 ---
 

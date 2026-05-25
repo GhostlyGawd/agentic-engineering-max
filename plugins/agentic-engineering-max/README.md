@@ -15,6 +15,8 @@ The discipline this plugin packages was developed across multiple real builds be
 /plugin install agentic-engineering-max@agentic-engineering-max
 ```
 
+> **If install fails with an `EBUSY` (file busy) error, just retry it** -- it is a transient file-lock during install, not a real failure. Run the `marketplace add` / `install` step again and it will succeed.
+
 Then in any project where you want to use it:
 
 ```text
@@ -22,6 +24,8 @@ Then in any project where you want to use it:
 ```
 
 `/aem-init` wires the plugin's git pre-commit hook into your repo (via `git config core.hooksPath`) and prints a next-action summary. SessionStart and SessionEnd hooks fire automatically once the plugin is installed.
+
+Run `/aem-doctor` any time to health-check the setup: it runs four read-only checks (git repo, PowerShell 7 present, hooks wired, scripts can run) and prints a plain-English status line plus a concrete fix for anything that is off. `/aem-init` runs this check for you at the end of setup.
 
 ## What it does (concepts)
 
