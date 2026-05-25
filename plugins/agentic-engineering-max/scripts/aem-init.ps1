@@ -1,25 +1,37 @@
-# aem-init.ps1 -- backing script for the /aem-init slash command (D-S9).
+# aem-init.ps1 -- backing script for the /aem-init skill.
 #
-# Configures the current git repository to use the agentic-engineering-max
-# plugin's hooks directory (sets core.hooksPath) and, optionally, scaffolds a
-# new planning slug with stub plan-state.md + plan-ledger.md state surfaces.
+# After the git-native rewrite (onboarding-ux D-S1) the /aem-init skill performs
+# the CORE action -- wiring core.hooksPath -- itself, in plain sh/git, and calls
+# this script ONLY to scaffold a planning slug (the skill passes -ScaffoldOnly
+# -Slug <name>). The full hooks-wiring path below is RETAINED for direct /
+# standalone invocation, but it is no longer the skill's code path.
 #
-# Invoked by commands/aem-init.md. The slash-command surface translates
-# --slug -> -Slug and --force -> -Force.
+# Modes:
+#   * Default (full init): confirm git repo -> probe pwsh 7 -> resolve plugin
+#     hooks dir -> wire core.hooksPath -> optional --slug scaffold. Standalone
+#     use only; the skill no longer routes through this path.
+#   * -ScaffoldOnly: skip the git-repo check, the pwsh probe, plugin-root
+#     resolution, and the core.hooksPath wiring; do ONLY the -Slug scaffolding.
+#     This is the skill's path (the skill already confirmed the repo and wired
+#     the hook in plain git before calling here).
+#
+# The slash/skill surface translates --slug -> -Slug and --force -> -Force.
 #
 # Exit codes:
 #   0  success
-#   1  not inside a git repository
+#   1  not inside a git repository (full-init mode only)
 #   2  core.hooksPath conflict (existing non-default, non-plugin value) and
-#      -Force was not passed
+#      -Force was not passed (full-init mode only)
 #   3  plugin hooks directory unavailable -- the plugin root could not be
 #      resolved (neither -PluginRoot nor $env:CLAUDE_PLUGIN_ROOT yielded an
-#      existing directory), or <root>/hooks does not exist on disk. Both mean
-#      "the plugin hooks dir cannot be resolved."
+#      existing directory), or <root>/hooks does not exist on disk (full-init
+#      mode only).
 #   4  unexpected internal error (top-level catch)
 #   5  PowerShell 7+ (pwsh) not resolvable on PATH, or reported version < 7.
-#      Emitted by the pre-config probe BEFORE any git config mutation, so a
-#      failed probe leaves core.hooksPath untouched.
+#      Emitted by the pre-config probe in FULL-INIT mode only, BEFORE any git
+#      config mutation. This path is NOT reachable from the skill, which never
+#      runs full-init mode (it passes -ScaffoldOnly) and no longer documents
+#      exit 5 as a gate.
 #
 # Conventions: ASCII-only inside double-quoted literals; git invocations send
 # stderr to $null (never the merge-into-stdout redirection form, which corrupts
@@ -29,15 +41,22 @@
 param(
     [string]$Slug,
     [switch]$Force,
-    # Plugin install root, passed in by the /aem-init slash command (which
-    # resolves it from the documented ${CLAUDE_SKILL_DIR} template, falling back
-    # to $CLAUDE_PLUGIN_ROOT). Explicit passing avoids relying on the env var
-    # being exported into a child pwsh process. When omitted (e.g. direct
+    # Plugin install root, passed in by the /aem-init skill (which resolves it
+    # from ${CLAUDE_PLUGIN_ROOT}). Explicit passing avoids relying on the env
+    # var being exported into a child pwsh process. When omitted (e.g. direct
     # invocation or the probe test) the script falls back to the env var.
-    [string]$PluginRoot
+    [string]$PluginRoot,
+    # Scaffold-only mode: the /aem-init skill already confirmed the git repo and
+    # wired core.hooksPath in plain git, so this script does ONLY the -Slug
+    # scaffolding. Skips the git-repo check, the pwsh probe, plugin-root
+    # resolution, and the hooks wiring (none of which the skill's path needs).
+    [switch]$ScaffoldOnly
 )
 
 try {
+  # In scaffold-only mode the skill has already confirmed the repo and wired the
+  # hook in plain git; skip sections 1-4 entirely and go straight to scaffolding.
+  if (-not $ScaffoldOnly) {
     # --- 1. Confirm we are inside a git repository ----------------------------
     $gitDir = git rev-parse --git-dir 2>$null
     if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($gitDir)) {
@@ -146,6 +165,7 @@ try {
         [Console]::Error.WriteLine("[aem-init] error: failed to set core.hooksPath")
         exit 4
     }
+  } # end if (-not $ScaffoldOnly)
 
     # --- 5. Optional slug scaffolding -----------------------------------------
     $scaffolded = $false
@@ -192,7 +212,9 @@ Append-only. Strike through superseded entries; never delete. Each entry carries
 
     # --- 6. Success summary ---------------------------------------------------
     Write-Host "[aem-init] done."
-    Write-Host ("  core.hooksPath set to: {0}" -f $hooksPathValue)
+    if (-not $ScaffoldOnly) {
+        Write-Host ("  core.hooksPath set to: {0}" -f $hooksPathValue)
+    }
     if ($scaffolded) {
         Write-Host ("  scaffolded planning slug: {0}" -f $Slug)
         Write-Host ("    - {0}" -f (Join-Path $slugDir "plan-state.md"))

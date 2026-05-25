@@ -40,21 +40,28 @@ to a non-default value that is not the plugin's hooks directory, `/aem-init`
 deliberately.
 
 **Exit codes:**
+- **0** -- success. Hooks wired (`core.hooksPath` set); optional `--slug`
+  scaffolded; health check ran.
 - **1** -- not inside a git repository. Run from your repo root, or `git init`
-  first.
+  first. Decided by `git rev-parse` before any change is written.
 - **2** -- `core.hooksPath` conflict. An existing non-default value is set and
   `--force` was not passed.
 - **3** -- plugin root could not be resolved (not running inside the plugin
   runtime) or the plugin hooks directory does not exist on disk.
-- **4** -- unexpected internal error, or the backing script was not found on
-  disk where the resolved plugin root pointed.
-- **5** -- PowerShell 7+ (`pwsh`) not resolvable on PATH, or version below 7.
+- **4** -- internal error, or (when `--slug` was passed) the scaffolding step
+  failed. Any nonzero exit from the scaffold step maps to 4.
+
+The core action -- wiring `core.hooksPath` -- is **plain git**: it needs no
+PowerShell, so PowerShell presence is no longer a precondition for setup and is
+no longer surfaced as an exit code. The health check reports whether `pwsh 7`
+is present; `--slug` scaffolding is the only step that needs it.
 
 **Uninstall / reverse:** the only persistent change to your repo is the git
 config key. Undo it with `git config --unset core.hooksPath`.
 
-**Prerequisite:** this build system runs on Windows OR Linux and requires
-PowerShell 7 (`pwsh`) and git, both resolvable on PATH.
+**Prerequisite:** git resolvable on PATH (the core action is pure git). The
+optional `--slug` scaffolding step additionally needs PowerShell 7 (`pwsh`) on
+PATH; without it, hooks are still wired and only the scaffold step is skipped.
 
 ```!
 ARGS="$ARGUMENTS"
@@ -65,69 +72,88 @@ FORCE=""
 set -- $ARGS
 while [ $# -gt 0 ]; do
   case "$1" in
-    --slug)
-      shift
-      SLUG="$1"
-      ;;
-    --force)
-      FORCE="1"
-      ;;
-    *)
-      echo "[aem-init] warning: ignoring unrecognized argument '$1'" >&2
-      ;;
+    --slug) shift; SLUG="$1" ;;
+    --force) FORCE="1" ;;
+    *) echo "[aem-init] warning: ignoring unrecognized argument '$1'" >&2 ;;
   esac
   shift
 done
 
-PS_ARGS=""
-if [ -n "$SLUG" ]; then
-  PS_ARGS="-Slug \"$SLUG\""
-fi
-if [ -n "$FORCE" ]; then
-  PS_ARGS="$PS_ARGS -Force"
+# 1. Confirm we are inside a git repository (exit 1). Plain git, no pwsh.
+if ! git rev-parse --git-dir >/dev/null 2>&1; then
+  echo "[aem-init] not a git repository -- run from your repo root or 'git init' first." >&2
+  exit 1
 fi
 
-# The token on the right-hand side below is substituted inline by Claude Code
-# before this block runs, because this is SKILL content (not command content).
-# That is the whole fix: in a slash command it would arrive empty.
+# 2. Resolve the plugin root + hooks dir (exit 3). CLAUDE_PLUGIN_ROOT is
+# substituted inline because this is SKILL content (it would arrive empty in a
+# slash command -- the v2.0.0 bug).
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"
 if [ -z "$PLUGIN_ROOT" ]; then
-  echo "[aem-init] error: plugin root did not resolve -- run from inside an installed plugin." >&2
+  echo "[aem-init] plugin root did not resolve -- run from inside an installed plugin." >&2
+  exit 3
+fi
+HOOKS_DIR="$PLUGIN_ROOT/hooks"
+if [ ! -d "$HOOKS_DIR" ]; then
+  echo "[aem-init] plugin hooks directory not found at $HOOKS_DIR" >&2
   exit 3
 fi
 
-SCRIPT="$PLUGIN_ROOT/scripts/aem-init.ps1"
-if [ ! -f "$SCRIPT" ]; then
-  # Distinct from exit 1: a missing script means the plugin root mis-resolved,
-  # NOT that the user is outside a git repo. The v2.0.0 bug collided these two
-  # (pwsh's own file-not-found exit 1 was mislabeled "not a git repository").
-  echo "[aem-init] internal error: backing script not found at $SCRIPT" >&2
+# Forward-slash form for cross-OS git compatibility. tr's octal '\134' (a single
+# backslash) is used instead of the literal '\\' SET, which GNU tr warns about
+# as non-portable; the octal form converts identically with no stderr noise.
+HOOKS_VALUE=$(printf '%s' "$HOOKS_DIR" | tr '\134' '/')
+
+# 3. Inspect any existing core.hooksPath; refuse to clobber a foreign value
+# without --force (Invariant-1 no silent clobber; exit 2). Normalize both sides
+# (forward slashes, trimmed trailing separator, lower-cased) before comparing.
+EXISTING=$(git config --get core.hooksPath 2>/dev/null || true)
+norm() { printf '%s' "$1" | tr '\134' '/' | sed 's:/*$::' | tr 'A-Z' 'a-z'; }
+EXISTING_NORM=$(norm "$EXISTING")
+PLUGIN_NORM=$(norm "$HOOKS_VALUE")
+DEFAULT_NORM=$(norm ".git/hooks")
+if [ -n "$EXISTING_NORM" ] && [ "$EXISTING_NORM" != "$PLUGIN_NORM" ] \
+   && [ "$EXISTING_NORM" != "$DEFAULT_NORM" ] && [ -z "$FORCE" ]; then
+  echo "[aem-init] core.hooksPath conflict (currently '$EXISTING') -- re-run with --force to overwrite." >&2
+  exit 2
+fi
+
+# 4. Wire the hook. This is the core action: a single plain-git command, no
+# pwsh, no -ExecutionPolicy, nothing the auto-mode classifier denies.
+if ! git config core.hooksPath "$HOOKS_VALUE"; then
+  echo "[aem-init] internal error: failed to set core.hooksPath" >&2
   exit 4
 fi
+echo "[aem-init] core.hooksPath set to: $HOOKS_VALUE"
 
-# Preflight: pwsh must resolve on PATH. A missing pwsh otherwise makes bash
-# return 127, which would fall through to the generic arm and never report the
-# documented exit-5 contract.
-if ! command -v pwsh >/dev/null 2>&1; then
-  echo "[aem-init] PowerShell 7+ (pwsh) not available -- install pwsh 7 per the Prerequisite section and re-run." >&2
-  exit 5
+# 5. Optional --slug scaffolding via the backing script. This is the ONLY step
+# that touches pwsh, and it runs with the plain -File shape and no policy
+# override. Any nonzero scaffold exit maps to 4 (D-S1).
+if [ -n "$SLUG" ]; then
+  SCRIPT="$PLUGIN_ROOT/scripts/aem-init.ps1"
+  if [ ! -f "$SCRIPT" ]; then
+    echo "[aem-init] internal error: backing script not found at $SCRIPT" >&2
+    exit 4
+  fi
+  if ! command -v pwsh >/dev/null 2>&1; then
+    echo "[aem-init] cannot scaffold --slug: pwsh not found on PATH (hooks are wired; re-run with pwsh installed to scaffold)." >&2
+    exit 4
+  fi
+  pwsh -NoProfile -File "$SCRIPT" -PluginRoot "$PLUGIN_ROOT" -Slug "$SLUG" -ScaffoldOnly
+  SC=$?
+  if [ "$SC" -ne 0 ]; then
+    echo "[aem-init] scaffolding failed (scaffold step exit $SC)." >&2
+    exit 4
+  fi
 fi
 
-# Pass the resolved root explicitly via -PluginRoot (the script's preferred
-# input; it falls back to $env:CLAUDE_PLUGIN_ROOT only when the param is
-# omitted). Explicit passing avoids relying on env export into the subprocess.
-pwsh -NoProfile -ExecutionPolicy Bypass -Command "& '$SCRIPT' -PluginRoot '$PLUGIN_ROOT' $PS_ARGS"
-CODE=$?
+# 6. TODO(T-006): tail-call the shared 4-check health routine here. T-006
+# creates scripts/aem-doctor.ps1 and REPLACES this TODO block with the real
+# tail call -- the doctor script run plainly (same invocation shape as the
+# scaffold call above, no policy-override flag), passing -PluginRoot
+# "$PLUGIN_ROOT". Until then, print a plain summary so the skill stays usable
+# standalone.
 
-case "$CODE" in
-  0) ;;
-  1) echo "[aem-init] not a git repository -- run from your repo root or 'git init' first." >&2 ;;
-  2) echo "[aem-init] core.hooksPath conflict -- re-run with --force to overwrite the existing value." >&2 ;;
-  3) echo "[aem-init] plugin hooks dir unavailable -- run from inside an installed Claude Code session." >&2 ;;
-  4) echo "[aem-init] internal error -- see the message above." >&2 ;;
-  5) echo "[aem-init] PowerShell 7+ (pwsh) not available -- install pwsh 7 per the Prerequisite section and re-run." >&2 ;;
-  *) echo "[aem-init] exited with code $CODE." >&2 ;;
-esac
-
-exit $CODE
+echo "[aem-init] done -- run /aem-doctor any time to re-check this repo's setup."
+exit 0
 ```
