@@ -11,7 +11,7 @@ hook_ps1="$(dirname "$0")/pre-commit.ps1"
 # (Linux/macOS/CI/Windows) and hard-fails with a diagnostic when pwsh is
 # not on PATH.
 if command -v pwsh >/dev/null 2>&1; then
-  exec pwsh -NoProfile -ExecutionPolicy Bypass -File "$hook_ps1"
+  exec pwsh -NoProfile -File "$hook_ps1"
 else
   echo "pre-commit: pwsh (PowerShell 7+) not found on PATH" >&2
   exit 1
