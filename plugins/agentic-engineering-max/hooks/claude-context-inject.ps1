@@ -49,6 +49,7 @@ try { $null = [Console]::In.ReadToEnd() } catch { }
 
 $errPrefix = "[claude-context-inject] internal error: "
 $nudge = "Run /aem-init to enable build-system enforcement (pre-commit hook for state-mirror discipline)."
+$ebusyNote = "If a plugin install or marketplace update failed with an EBUSY (file busy) error, just retry it -- it is a transient file-lock, not a real failure."
 
 function Write-Envelope {
     param([string]$Context)
@@ -112,7 +113,10 @@ try {
 
     $composed = $templateText
     if ($appendNudge) {
-        $composed = $templateText + "`n`n" + $nudge
+        # Ride the EBUSY first-run note alongside the /aem-init nudge as a second
+        # sentence (D-S3): it surfaces only on the fresh / not-yet-wired signal,
+        # so a configured repo is never nagged about a transient install lock.
+        $composed = $templateText + "`n`n" + $nudge + "`n" + $ebusyNote
     }
 
     Write-Envelope $composed
