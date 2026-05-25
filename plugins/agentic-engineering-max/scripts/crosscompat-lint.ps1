@@ -13,6 +13,11 @@
 #                       Join-Path or '/'. ('\' does not separate paths on Linux.)
 #   powershell-invoke : invoking the Windows-only 'powershell'/'powershell.exe'
 #                       executable. Use 'pwsh' (cross-OS PowerShell 7).
+#   md-bypass         : a 'pwsh ... -ExecutionPolicy Bypass ... <script>.ps1'
+#                       invocation inside a .md fenced bash block. Drop the
+#                       -ExecutionPolicy Bypass flag (classifier-hostile shape).
+#   md-powershell-invoke : the legacy 'powershell'/'powershell.exe' exe invoked
+#                       inside a .md fenced bash block. Use 'pwsh'.
 #   crlf-shim         : a bash shim ('pre-commit' / *.sh) carrying CR (0x0D)
 #                       bytes -- a CRLF shebang silently breaks under Linux bash.
 #   non-ascii-literal : a non-ASCII char inside a .ps1 "..." double-quoted
@@ -36,7 +41,7 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 # Resolve target files. With no args, scan the standard dirs. With args, scan
 # exactly those that are lintable types (so pre-commit can hand us the full
 # staged list and we self-filter).
-$lintExt  = @('.ps1', '.json')
+$lintExt  = @('.ps1', '.json', '.md')
 function Test-IsShim([System.IO.FileInfo]$fi) { return ($fi.Name -eq 'pre-commit' -or $fi.Extension -eq '.sh') }
 
 $files = New-Object System.Collections.Generic.List[System.IO.FileInfo]
@@ -66,6 +71,7 @@ foreach ($f in $files) {
     $rel = $f.FullName.Substring($repoRoot.Length).TrimStart('\', '/').Replace('\', '/')
     $isPs   = ($f.Extension -eq '.ps1')
     $isJson = ($f.Extension -eq '.json')
+    $isMd   = ($f.Extension -eq '.md')
     $isShim = (Test-IsShim $f)
 
     $bytes = [IO.File]::ReadAllBytes($f.FullName)
@@ -76,6 +82,7 @@ foreach ($f in $files) {
         $findings.Add("crlf-shim         ${rel}: contains CR (0x0D) bytes -- bash shim must be LF-only")
     }
 
+    $inMdBlock = $false
     for ($i = 0; $i -lt $lines.Count; $i++) {
         $line   = $lines[$i]
         $lineNo = $i + 1
@@ -126,7 +133,7 @@ foreach ($f in $files) {
         # invocation contexts only, so host-detection vars, doc URLs, and string
         # checks ('powershell.exe' after Join-Path/PSHOME, -cmatch 'powershell',
         # install-powershell.sh) are NOT flagged.
-        if ($line -match '(?i)(&\s*|exec\s+|-FilePath\s+[''"]?|FilePath\s+[''"]?|"command"\s*:\s*"[^"]*\s)powershell(\.exe)?\b') {
+        if (-not $isMd -and $line -match '(?i)(&\s*|exec\s+|-FilePath\s+[''"]?|FilePath\s+[''"]?|"command"\s*:\s*"[^"]*\s)powershell(\.exe)?\b') {
             $findings.Add("powershell-invoke ${rel}:${lineNo}: invokes Windows-only 'powershell' -- use 'pwsh' (or # crosscompat-ok)")
         }
 
@@ -136,6 +143,27 @@ foreach ($f in $files) {
                 $bad = $false
                 foreach ($ch in $m.Groups[1].Value.ToCharArray()) { if ([int]$ch -gt 127) { $bad = $true; break } }
                 if ($bad) { $findings.Add("non-ascii-literal ${rel}:${lineNo}: non-ASCII char in a double-quoted literal -- use ASCII"); break }
+            }
+        }
+
+        # md-bash-block: inside a .md fenced bash block (lang tag ! / bash / sh /
+        # shell), flag the classifier-hostile Bypass shape and the legacy
+        # 'powershell' exe. Scoped to fenced blocks + on-line token co-occurrence,
+        # so .md prose and this spec/docs text are never flagged. A suppressed line
+        # ('# crosscompat-ok') is skipped by the top-of-loop continue. The literal
+        # 'powershel[l]' char-class keeps this detector from flagging its own source.
+        if ($isMd) {
+            if (-not $inMdBlock) {
+                if ($line -match '^\s*```\s*(!|bash|sh|shell)\s*$') { $inMdBlock = $true }
+            } elseif ($line -match '^\s*```\s*$') {
+                $inMdBlock = $false
+            } else {
+                if (($line -match '(?i)-ExecutionPolicy\s+Bypass') -and ($line -match '(?i)\.ps1\b') -and ($line -match '(?i)\b(pwsh|powershel[l])(\.exe)?\b')) {
+                    $findings.Add("md-bypass         ${rel}:${lineNo}: 'pwsh -ExecutionPolicy Bypass <script>.ps1' in a .md bash block -- drop -ExecutionPolicy Bypass (or # crosscompat-ok)")
+                }
+                if ($line -match '(?i)(^|[&;|]|\bexec\s+)\s*powershel[l](\.exe)?\b') {
+                    $findings.Add("md-powershell-invoke ${rel}:${lineNo}: invokes Windows-only 'powershell' in a .md bash block -- use 'pwsh' (or # crosscompat-ok)")
+                }
             }
         }
     }
