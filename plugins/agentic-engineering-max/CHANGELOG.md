@@ -26,9 +26,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **`/aem-init` is now git-native** -- it bootstraps via git plumbing rather
   than the prior path, and ends by invoking the shared health check.
-- **All skills, hooks, and bash shims drop `-ExecutionPolicy Bypass`.** They
-  invoke `pwsh -NoProfile -File ...` with no policy override, removing the
-  malware-lookalike AMSI/EDR signature. Hooks run with plain `-File`.
+- **The classifier-facing skills (`/aem-init`, `/board`, `/unblock`,
+  `/aem-doctor`), the `hooks.json` hook runners, and the bash pre-commit shims
+  drop `-ExecutionPolicy Bypass`.** They invoke `pwsh -NoProfile -File ...` with
+  no policy override, removing the malware-lookalike AMSI/EDR signature from the
+  surfaces a user or scanner meets first. Hooks run with plain `-File`.
 - **`/aem-init` exit-code surface simplified (D-S1):** exit codes are 0/1/2/3/4;
   exit 5 is no longer documented as a gate.
 
