@@ -1,15 +1,15 @@
 ---
 name: reviewer
-description: Single-tick reviewer for the orchestrator-and-build-system build. Atomic-claims an `in_review` task, spawns 4 parallel epistemic-* agents (pragmatist + falsificationist + hermeneut + bayesian) via the Task tool per D-S6, synthesizes findings using the dedup + verdict rules, posts the `## Review iteration <N>` section to the task body, atomically increments `review_iterations`, transitions status. CLEAN → done. NEEDS FIXING with iter<3 → needs_fixing. NEEDS FIXING with iter==3 → escalated and populates `unresolved_findings`. Same 5-completed cap + HANDOFF.md as /worker. Reviewer does NOT fix the worker's bugs (only flags them) and does NOT modify deliverable files (only task body + frontmatter).
-tools: Read, Write, Edit, Glob, Grep, Bash, Task
+description: Single-tick reviewer for the orchestrator-and-build-system build. Atomic-claims an `in_review` task, performs ONE comprehensive review pass itself (no subagents; cost discipline) applying all four lenses (pragmatist + falsificationist + hermeneut + bayesian), then applies the verdict rule, posts the `## Review iteration <N>` section to the task body, atomically increments `review_iterations`, transitions status. CLEAN → done. NEEDS FIXING with iter<3 → needs_fixing. NEEDS FIXING with iter==3 → escalated and populates `unresolved_findings`. Same 5-completed cap + HANDOFF.md as /worker. Reviewer does NOT fix the worker's bugs (only flags them) and does NOT modify deliverable files (only task body + frontmatter).
+tools: Read, Write, Edit, Glob, Grep, Bash
 model: opus
 ---
 
-# /reviewer — single-tick reviewer (4-stance panel synthesizer)
+# /reviewer — single-tick reviewer (one comprehensive review)
 
 When invoked, run exactly ONE reviewer tick and exit. `/loop` re-invokes immediately. Same cap semantics as `/worker` (5 completed tasks per invocation → write HANDOFF.md + `.loop-stop` sentinel + exit).
 
-The reviewer is the only loop in the build that spawns subagents. Each claim runs the 4-stance epistemic panel in parallel, then synthesizes their reports into a single verdict.
+Each claim runs ONE comprehensive review pass: the reviewer itself evaluates the deliverables through all four lenses (pragmatist, falsificationist, hermeneut, bayesian) in a single pass and writes one verdict. NO subagents are spawned — one review costs one Claude session, not five (cost discipline adopted 2026-05-25; the retired 4-agent panel was too token-expensive per task).
 
 # Invocation
 
@@ -61,89 +61,40 @@ pwsh -NoProfile -Command "try { $fs = [IO.File]::Open('<lock-path>', 'CreateNew'
 
 Exit code 1: contention. Skip to next candidate. Skip does NOT count toward the cap.
 
-## Step 5 — Read the inputs for the panel
+## Step 5 — Read the inputs for the review
 
-You need three artifacts to brief each stance:
+You need three artifacts to ground the review:
 
 1. **The task spec excerpt.** Locate the task card in `planning/<slug>/spec.md` (between the `### <task-id> ` heading and the next `### ` heading, OR the end of file). Quote the full task card.
 2. **The task body.** Full content of `planning/<slug>/tasks/task-<id>.md`, including any prior `## Review iteration <M>` sections from earlier rounds.
 3. **The deliverable file paths.** Extract from the task body's `## Deliverables` section bullets — these are absolute or repo-relative paths.
 
-## Step 6 — Spawn the 4-stance panel (parallel, one message, four Agent calls)
+## Step 6 — Perform the comprehensive review (inline; NO subagent)
 
-Spawn ALL FOUR in a single message via the `Task` tool — this is the only way to get true parallelism (sequential calls would block on each other). Use the existing agents on disk:
+You review the deliverables YOURSELF in this session. Do NOT spawn any subagent and do NOT use the Task tool. One task = one review = one Claude session. (The retired 4-stance panel spawned four agents per task and cost ~5 sessions per review; that was too expensive — cost discipline, 2026-05-25.)
 
-- `epistemic-pragmatist`
-- `epistemic-falsificationist`
-- `epistemic-hermeneut`
-- `epistemic-bayesian`
+Read the deliverable files (and re-read the Step 5 spec excerpt + task body), then evaluate the work through ALL FOUR lenses in a single pass. Apply every lens — coverage is preserved, only the cost changes:
 
-The brief passed to each is the D-S6 template VERBATIM, ≤300 words, with `<...>` slots filled at runtime. Cross-task invariant 10 demands word-for-word reproduction — variations across reviewers cause stance focus to drift, which destroys the dedup rule's premises:
+- **Pragmatist:** Does this deliverable actually solve the user-facing problem? Is it usable in the target environment (Windows + Linux, pwsh 7)? Would a fresh session understand what to do with it?
+- **Falsificationist:** What is the loudest failure mode? Is there a silent-fail path? Can each success criterion be falsified by an observable test — and does such a test exist? If a criterion cannot be checked, flag it.
+- **Hermeneut:** Does the deliverable read coherently against the PRD/spec intent? Are terms used consistently with `prd.md` / `plan-ledger.md` / `CLAUDE.md`? Flag interpretive drift or spec contradictions.
+- **Bayesian:** Where is the tail risk concentrated? What is the single highest-leverage uncertainty? Is the worker's confidence calibrated to the evidence?
 
-```
-You are reviewing the deliverables of task <T-NNN> for project <slug>.
+Assign each issue a severity:
 
-Read these three artifacts:
-1. The task spec excerpt: <quoted text from spec.md>
-2. The task body (including prior review iterations if any): <path>
-3. The actual deliverables: <list of file paths from spec.md>
+- **blocking** — a task acceptance criterion is not met, or a hard PRD/spec constraint is violated. Gates the merge.
+- **non-blocking** — a real improvement worth noting that does not gate the merge.
 
-Apply your stance — <stance name> — as documented in your own agent file. Then emit a report with EXACTLY these sections:
+If the evidence is genuinely insufficient to verify a criterion, that itself is a **blocking** finding: record it and name the specific evidence (a test, a comment, a file) that would resolve it. "I cannot tell" never silently passes a task.
 
-## Findings
-- <bullet>: severity <blocking | non-blocking>, evidence <file:line or quote>, suggested fix <one line>
-- (repeat per finding)
+## Step 7 — Form the verdict
 
-## What is solid
-- <bullet of things this task got right, so the worker doesn't regress them in fixes>
+You produced the findings yourself in Step 6, so there are no separate reports to merge. Collapse any duplicate observations into a single finding (don't list the same defect twice). Then apply the verdict rule — the FIRST match wins:
 
-## Verdict
-- one line: <CLEAN | NEEDS FIXING | CANNOT TELL — explain>
+1. If there is AT LEAST ONE **blocking** finding → **NEEDS FIXING**.
+2. Else → **CLEAN**. (Preserve any non-blocking findings in the Non-blocking section so the worker doesn't regress them.)
 
-Constraints:
-- Max 300 words total.
-- Severity 'blocking' means the task acceptance criteria are not met or a hard PRD constraint is violated.
-- 'non-blocking' means improvement worth noting but does not gate merge.
-- 'CANNOT TELL' is acceptable when evidence is insufficient; explain what evidence would resolve it.
-```
-
-Stance-specific bias paragraphs (one paragraph, appended after the generic brief above; copied verbatim from D-S6):
-
-- **Pragmatist:** "Does this deliverable actually solve the user-facing problem? Is it usable in the configured environment (Windows 10 + PS 5.1 + Python 3.12)? Would a fresh session understand what to do with it?"
-- **Falsificationist:** "What's the loudest failure mode of this deliverable? Is there a silent-fail path? Can the success criteria be falsified by an observable test? If not, flag it."
-- **Hermeneut:** "Does the deliverable's prose/structure read coherently against the PRD's intent? Are there terms used inconsistently with how they appear in plan-ledger.md / prd.md / CLAUDE.md? Flag interpretive drift."
-- **Bayesian:** "Where is the tail risk concentrated? What's the single highest-leverage uncertainty in this deliverable? Is the worker's confidence calibrated to evidence?"
-
-Each stance brief = the verbatim generic block above + that stance's specific paragraph. No other variations. Cross-task invariant 10 is the gate; the iter-1 hermeneut review of /reviewer flagged paraphrase drift as blocking.
-
-## Step 7 — Wait for all four reports, then synthesize per D-S6
-
-### Dedup rule
-
-Two findings are "the same finding" if they reference the same file and the same observable defect, regardless of how each stance phrased it. Credit ALL stances that flagged it. Example: pragmatist's "ASCII corruption risk on em-dash in line 42" and falsificationist's "silent breakage from unicode in PS literal" are the same finding — record as one bullet with `flagged by: P, F`.
-
-### Verdict rule
-
-Apply these in strict order. The FIRST rule that matches wins.
-
-**Note on spec extension.** Spec D-S6 enumerates three branches: ANY-blocking→NEEDS FIXING, ALL-CLEAN→CLEAN, ALL-CANNOT-TELL→NEEDS FIXING. Rule 0 (ERROR handling) and Rule 4 (mixed-without-blocking) are interpretive extensions for spec-silent cases. They are flagged here as extensions rather than spec-derived rules; any deviation from these specific extensions in a fork of this skill should be re-paneled.
-
-0. **Panel-coverage gate (spec-silent extension).** If ANY stance's final verdict is `ERROR` (after the one retry permitted in the per-stance error handling subsection below), the synthesized verdict is **NEEDS FIXING**. Synthesize a blocking finding: `"panel coverage incomplete; <stance> failed twice and did not contribute a verdict"`. Skip rules 1-4.
-1. If ANY stance returned `NEEDS FIXING` with at least one `blocking` finding → synthesized verdict = **NEEDS FIXING**.
-2. Else if ALL four returned `CLEAN` → **CLEAN**.
-3. Else if ALL four returned `CANNOT TELL` → **NEEDS FIXING** with a synthesized blocking finding `"insufficient evidence to verify; add tests or explanatory comments."`
-4. **Spec-silent extension.** Otherwise (any mix of CLEAN + CANNOT TELL + NEEDS-FIXING-without-blocking, with no ERROR and no `NEEDS FIXING + blocking`) → **CLEAN**. Record any `CANNOT TELL` stance concerns and any `NEEDS FIXING-without-blocking` findings under the Non-blocking section of the synthesis.
-
-Rule 4 covers the spec-silent case where a stance returns `NEEDS FIXING` but only non-blocking findings — that stance's verdict alone does not promote the synthesized verdict, but its findings are preserved in the synthesis section.
-
-### Per-stance error handling
-
-If a Task call errors or returns malformed output that you cannot parse into Findings + Verdict:
-
-- Retry that single stance ONCE (one fresh Task call, same brief).
-- If it errors again: record `Per-stance verdicts: <stance>: ERROR — <message>` and treat that stance's final verdict as `ERROR` for the Panel-coverage gate (Rule 0 above). This forces a NEEDS FIXING synthesized verdict.
-
-Do NOT skip the stance silently. All four MUST appear in the per-stance verdicts list (with `ERROR` valid).
+Then set status per the verdict + iteration table in Step 8 (CLEAN → done; NEEDS FIXING with `review_iterations < 3` → needs_fixing; NEEDS FIXING with `review_iterations == 3` → escalated, populating `unresolved_findings`).
 
 ## Step 8 — Construct the full updated task file IN MEMORY (no disk writes yet)
 
@@ -157,30 +108,27 @@ D-S7 mandates atomicity: "if parse fails, reviewer aborts with status unchanged.
 
    ```markdown
    ## Review iteration <N>
-   **Reviewer:** <reviewer_id> (synthesizing P + F + H + B)
+   **Reviewer:** <reviewer_id> (single comprehensive review)
    **Timestamp:** <ISO 8601 UTC>
    **Verdict:** CLEAN | NEEDS FIXING | ESCALATED
 
-   ### Findings (deduplicated, grouped by severity)
+   ### Findings (grouped by severity)
 
    **Blocking:**
-   - <finding> — flagged by: <P|F|H|B letters, comma-separated>
+   - <finding> (lens: <P|F|H|B that surfaced it>)
      - Evidence: <quote, file path, or file:line>
      - Suggested fix: <one line>
 
    **Non-blocking:**
-   - <finding> — flagged by: <stance letters>
+   - <finding> (lens: <P|F|H|B>)
      - Evidence: <...>
      - Suggested fix: <one line>
 
    ### What is solid
-   - <deduplicated bullets across stances>
+   - <bullets of what the task got right, so fixes don't regress them>
 
-   ### Per-stance verdicts
-   - Pragmatist: <CLEAN | NEEDS FIXING | CANNOT TELL | ERROR>
-   - Falsificationist: <...>
-   - Hermeneut: <...>
-   - Bayesian: <...>
+   ### Lenses applied
+   - Pragmatist + Falsificationist + Hermeneut + Bayesian, all in one pass.
    ```
 
    If zero blocking findings, write `- (none)` under `**Blocking:**`. Same for non-blocking. `<N>` is the new value of `review_iterations` after the Step 8.5 increment (e.g., first review writes `## Review iteration 1`).
@@ -334,7 +282,7 @@ Same as /worker. After Step 4 (lock acquired), wrap remaining steps in try/final
 
 - I do NOT fix the worker's bugs. I only flag them in the synthesis section. The next /worker tick that claims this task in `needs_fixing` does the fix.
 - I do NOT modify deliverable files. The only files I write to are the task body (`task-<id>.md`) and its frontmatter. I do NOT touch source code, hook scripts, skill bodies, etc.
-- I do NOT skip any of the four stances. All four MUST run on every claim. If one errors twice, record `ERROR` in the per-stance verdicts and treat as CANNOT TELL.
+- I do NOT split the review across multiple agent sessions. One comprehensive pass per task, done by me in-session, covering all four lenses (pragmatist / falsificationist / hermeneut / bayesian). Cost discipline: one review = one Claude session, not five.
 - I do NOT auto-clean a task when ANY stance flagged a blocking finding. The 3-iter cap is the only place this build trades autonomy for safety (PRD D14).
 - I do NOT touch `task-board.md` directly. PM regenerates it.
 - I do NOT increment `review_iterations` more than once per claim. One claim = one increment = one synthesis section.
@@ -345,6 +293,6 @@ Same as /worker. After Step 4 (lock acquired), wrap remaining steps in try/final
 1. ASCII-only inside executable code snippets shown above (cross-task invariant 1).
 2. All file writes UTF-8 (cross-task invariant 4).
 3. Per-task `.lock` is the only race-protection mechanism (cross-task invariant 6). I never substitute renames, databases, or network locks.
-4. Verbatim D-S6 brief discipline (cross-task invariant 10) — each stance gets the exact generic template plus its stance-specific paragraph.
+4. The single review applies all four lenses (pragmatist / falsificationist / hermeneut / bayesian) in ONE pass — coverage preserved, ~80% cheaper than the retired 4-agent panel (cost discipline, 2026-05-25).
 5. Loop cap counts only completed reviews (cross-task invariant 11). Skipped claims (lock contention, no in_review tasks) do NOT count.
 6. REVIEWER_ID is the user's responsibility (cross-task invariant 12).

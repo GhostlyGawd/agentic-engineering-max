@@ -3,8 +3,9 @@
 # Purpose:
 #   Run `claude -p /reviewer <slug>` on a self-paced loop. Each tick is a
 #   fresh, headless Claude session. Reviewer claims any task in
-#   `in_review` status, spawns the 4-stance epistemic panel, synthesizes
-#   a verdict, and either marks the task `done` (CLEAN) or sends it
+#   `in_review` status, runs ONE comprehensive review pass itself (no
+#   subagents; all four lenses in a single pass -- cost discipline),
+#   forms a verdict, and either marks the task `done` (CLEAN) or sends it
 #   back as `needs_fixing` (up to 3 iterations before automatic
 #   escalation).
 #
