@@ -271,8 +271,19 @@ function Start-AgentLoop {
     $argLine  = Get-AgentArgLine -Script $Script -Slug $Slug -IdParam $IdParam -RoleId $RoleId -SleepSeconds $SleepSeconds
     $spawnOut = Join-Path $LogDir ("spawn-" + $RoleId + "-" + $Stamp + ".out.log")
     $spawnErr = Join-Path $LogDir ("spawn-" + $RoleId + "-" + $Stamp + ".err.log")
-    return Start-Process -FilePath $PwshExe -ArgumentList $argLine -WindowStyle Hidden -PassThru `
-        -RedirectStandardOutput $spawnOut -RedirectStandardError $spawnErr
+    # -WindowStyle is Windows-only; Linux/macOS pwsh throws "The parameter
+    # '-WindowStyle' is not supported for the cmdlet 'Start-Process' on this
+    # edition of PowerShell." A hidden window is a Windows nicety with no Linux
+    # analog, so add it conditionally. Dogfooding find 2026-05-25 (Linux CI).
+    $spArgs = @{
+        FilePath               = $PwshExe
+        ArgumentList           = $argLine
+        PassThru               = $true
+        RedirectStandardOutput = $spawnOut
+        RedirectStandardError  = $spawnErr
+    }
+    if ($IsWindows) { $spArgs['WindowStyle'] = 'Hidden' }
+    return Start-Process @spArgs
 }
 
 $tick = 0
