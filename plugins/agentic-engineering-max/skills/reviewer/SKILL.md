@@ -214,6 +214,73 @@ Only reachable if Step 8's in-memory parse-check passed. From here, all state ch
 
 5. **Release the lock:** `Remove-Item "planning/<slug>/tasks/task-<id>.lock" -Force`.
 
+## Step 10 — Emit non-blocking findings to intake.jsonl (D-S5)
+
+Reachable after Step 9 committed the verdict and released the `.lock`. The non-blocking findings you produced in Step 6/7 (the `**Non-blocking:**` bullets) are the backlog seed: each one is appended as a single-line intake record to `planning/<slug>/backlog/intake.jsonl` so the controller's deterministic triage (`bin/triage-intake.ps1`, ZERO-LLM, T-201) can dedup it against the live board and, on no match, materialize a gated `proposed` task. This rides the review pass you just finished — NO new Claude session, NO subagent, no extra cost. **Blocking findings are NOT emitted** — they gate the current task via the needs_fixing loop, not the backlog.
+
+If there are zero non-blocking findings, skip this step entirely (write nothing, commit nothing).
+
+### The intake record shape (D-S5 — exact)
+
+One JSON object per line, these eight fields, exact spellings:
+
+```
+{"key":"<16 lowercase hex>","kind":"bug|feature|process","source_task":"<T-NNN>","target_slug":"<slug>","target":"<file_or_area>","symbol":"<symbol_or_area>","text":"<one-line finding>","ts":"<ISO 8601 UTC>"}
+```
+
+- `kind` — classify the finding: `bug` (defect / latent breakage), `feature` (new capability or enhancement), `process` (workflow / docs / convention gap).
+- `source_task` — the frontmatter `id` of the task you just reviewed (e.g. `T-204`).
+- `target_slug` — the build slug (`<slug>`). Triage compares this to the source slug for the cross-slug guard (D-S12).
+- `target` — the file path or area the finding is about (taken from the finding's Evidence).
+- `symbol` — the function / section / area within the target; use the area name when there is no precise symbol.
+- `text` — the one-line finding summary (the same wording as the Non-blocking bullet, collapsed to one line).
+- `ts` — emission time, ISO 8601 UTC.
+- `key` — the D-S5 `dedup_key`: `SHA256( target_slug + " " + target + " " + symbol + " " + kind )` (single ASCII spaces between the four parts), rendered lowercase hex, first 16 chars. Triage recomputes / reads this same key, so the formula MUST match byte-for-byte. The three delimiters are literal single spaces — a transcription error once saved them as NUL bytes (see `plan-ledger.md` v1.0.1); they are spaces.
+
+### The append (one-line-per-finding, append-only)
+
+Compute the key and append with the canonical helper below. The log is **append-only**: never rewrite, reorder, or delete a prior line. One `AppendAllText` call writes exactly one line (atomic-friendly open-append). Create `planning/<slug>/backlog/` if it does not yet exist.
+
+```
+# $nonBlocking is your list of non-blocking findings, each a hashtable:
+#   @{ kind = 'bug|feature|process'; target = '<file_or_area>'; symbol = '<symbol_or_area>'; text = '<one-line>' }
+$slug      = '<slug>'
+$srcTask   = '<T-NNN>'   # frontmatter id of the task just reviewed
+$intakeDir = "planning/$slug/backlog"
+$intake    = "$intakeDir/intake.jsonl"
+if (-not (Test-Path $intakeDir)) { New-Item -ItemType Directory -Path $intakeDir -Force | Out-Null }
+$enc = [Text.UTF8Encoding]::new($false)   # no BOM
+$sha = [Security.Cryptography.SHA256]::Create()
+foreach ($f in $nonBlocking) {
+    $hashInput = $slug + ' ' + $f.target + ' ' + $f.symbol + ' ' + $f.kind
+    $hex = ([BitConverter]::ToString($sha.ComputeHash($enc.GetBytes($hashInput))) -replace '-', '').ToLowerInvariant()
+    $rec = [ordered]@{
+        key         = $hex.Substring(0, 16)
+        kind        = $f.kind
+        source_task = $srcTask
+        target_slug = $slug
+        target      = $f.target
+        symbol      = $f.symbol
+        text        = $f.text
+        ts          = [DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ')
+    }
+    $line = ($rec | ConvertTo-Json -Compress)
+    [IO.File]::AppendAllText($intake, $line + "`n", $enc)
+}
+```
+
+### Commit the appended records (isolated; non-fatal on failure)
+
+```
+git add planning/<slug>/backlog/intake.jsonl
+git commit -m "T-NNN review iter <N>: emit <count> intake finding(s)" \
+           -m "Reviewer-ID: <reviewer_id>" \
+           -m "Claude-Session-ID: <session_id>" \
+           -- planning/<slug>/backlog/intake.jsonl
+```
+
+This is a SEPARATE commit from Step 9's task-file commit, isolated by its own trailing `-- pathspec` (concurrent reviewers share one git index; the pathspec commits only the intake log from a temp index, ignoring anything else concurrently staged). **If this commit fails, emit `[<reviewer_id>] intake commit failed for T-NNN; records left in working tree` to stderr and CONTINUE** — do NOT fail the tick. The verdict already landed in Step 9, and the local triage step reads the working-tree `intake.jsonl` regardless of commit state. A duplicate finding re-emitted on a later review iteration is harmless: its stable `dedup_key` makes triage fold it into the existing task (a `## Triage notes` line) rather than spawn a rival.
+
 ## Step 11 — Increment counter and check cap
 
 Increment `$env:REVIEWER_LOOP_COUNT` by 1. PowerShell expression that survives unset / empty-string / non-numeric initial state:
@@ -287,6 +354,8 @@ Same as /worker. After Step 4 (lock acquired), wrap remaining steps in try/final
 - I do NOT touch `task-board.md` directly. PM regenerates it.
 - I do NOT increment `review_iterations` more than once per claim. One claim = one increment = one synthesis section.
 - I do NOT auto-generate REVIEWER_ID. The user sets it; I read it.
+- I do NOT emit blocking findings to `intake.jsonl` — only non-blocking ones (Step 10). Blocking findings gate the current task via the needs_fixing loop.
+- I do NOT rewrite, reorder, or delete a prior `intake.jsonl` line. The log is strictly append-only (one `AppendAllText` per finding); triage tracks progress via its own high-water mark.
 
 # Cross-task invariants honored
 
@@ -296,3 +365,4 @@ Same as /worker. After Step 4 (lock acquired), wrap remaining steps in try/final
 4. The single review applies all four lenses (pragmatist / falsificationist / hermeneut / bayesian) in ONE pass — coverage preserved, ~80% cheaper than the retired 4-agent panel (cost discipline, 2026-05-25).
 5. Loop cap counts only completed reviews (cross-task invariant 11). Skipped claims (lock contention, no in_review tasks) do NOT count.
 6. REVIEWER_ID is the user's responsibility (cross-task invariant 12).
+7. `intake.jsonl` is strictly append-only (cross-task invariant 13); I append one line per non-blocking finding and never rewrite the log. The `dedup_key` formula (SHA256 of `target_slug " " target " " symbol " " kind`, lowercase hex, 16 chars) is byte-identical to triage's, so reviewer-emitted keys and triage-computed keys agree.
