@@ -155,8 +155,21 @@ fi
 # hooks are still wired -- and point the user at /aem-doctor for later.
 DOCTOR="$PLUGIN_ROOT/scripts/aem-doctor.ps1"
 if command -v pwsh >/dev/null 2>&1 && [ -f "$DOCTOR" ]; then
-  echo "[aem-init] running health check (/aem-doctor)..."
-  pwsh -NoProfile -File "$DOCTOR" -PluginRoot "$PLUGIN_ROOT" || true
+  # Pre-flight (locked-down fix): if scripts are blocked, do NOT load the doctor
+  # .ps1 (it would dump a raw "running scripts is disabled" wall). Ask Windows
+  # the effective policy via a benign INLINE -Command (never gated by the policy)
+  # and surface one plain message instead. Hooks are already wired, so /aem-init
+  # still succeeds; the user just needs to allow scripts for the hooks to run.
+  POLICY=$(pwsh -NoProfile -Command "(Get-ExecutionPolicy).ToString()" 2>/dev/null | tr -d '[:space:]')
+  if [ "$POLICY" = "Restricted" ] || [ "$POLICY" = "AllSigned" ]; then
+    echo "[aem-init] health check: scripts are BLOCKED on this machine (execution policy '$POLICY')."
+    echo "[aem-init]   Hooks are wired, but they cannot run until you allow local scripts:"
+    echo "[aem-init]     pwsh -Command \"Set-ExecutionPolicy -Scope CurrentUser RemoteSigned\"   (or ask your IT admin)."
+    echo "[aem-init]   Then run /aem-doctor to confirm."
+  else
+    echo "[aem-init] running health check (/aem-doctor)..."
+    pwsh -NoProfile -File "$DOCTOR" -PluginRoot "$PLUGIN_ROOT" || true
+  fi
 else
   echo "[aem-init] skipped health check: pwsh not found on PATH. Run /aem-doctor once pwsh 7 is installed." >&2
 fi

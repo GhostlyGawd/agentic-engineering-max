@@ -35,15 +35,17 @@ fix line. A final summary line says either "all good" or what to fix.
 > "here are things to fix", not "the health check itself failed" -- nothing was
 > mutated either way.
 
-> **If you see "running scripts is disabled" instead of the report.** This skill
-> runs the doctor as a `.ps1` via `pwsh -NoProfile -File` with no
-> policy-override flag (no Bypass) -- the same no-override invocation the rest of
-> the plugin uses. So if your machine's execution policy blocks local scripts
-> (Restricted / AllSigned), the host refuses to load the doctor and you get that
-> error instead of the four-check report. That error IS the diagnosis check (d)
-> would have printed: fix it with
-> `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` (or ask your IT admin if
-> the policy is locked at the machine scope) and re-run `/aem-doctor`.
+> **On a locked-down machine you get a clear message, not a wall.** Before it
+> loads the doctor `.ps1`, this skill asks Windows for the effective execution
+> policy via a benign inline `pwsh -Command "(Get-ExecutionPolicy)"`. An inline
+> `-Command` is never gated by the execution policy, so it answers even on a box
+> where loading a `.ps1` would be refused. If scripts are blocked (Restricted /
+> AllSigned) it prints one plain status line plus the fix
+> (`Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`, or ask your IT admin
+> if the policy is locked at machine scope) and stops -- it never tries to load
+> the script, so you never see a raw "running scripts is disabled" wall. This is
+> the locked-down branch of check (d), and it loads no script file, so it runs
+> to completion on a blocked box.
 
 ```!
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"
@@ -63,5 +65,24 @@ if ! command -v pwsh >/dev/null 2>&1; then
   exit 5
 fi
 
+# Pre-flight (locked-down fix): can scripts even LOAD here? Ask Windows the
+# effective execution policy via a benign INLINE -Command. An inline -Command is
+# never gated by ExecutionPolicy, so it answers even where loading a .ps1 is
+# refused. If scripts are blocked, surface ONE plain message + the fix and stop
+# WITHOUT loading the .ps1 (loading it would dump a raw "running scripts is
+# disabled" wall -- the exact thing /aem-doctor exists to prevent). This is the
+# locked-down branch of check (d); it loads no script file, so it runs to
+# completion on a blocked box.
+POLICY=$(pwsh -NoProfile -Command "(Get-ExecutionPolicy).ToString()" 2>/dev/null | tr -d '[:space:]')
+if [ "$POLICY" = "Restricted" ] || [ "$POLICY" = "AllSigned" ]; then
+  echo "[aem-doctor] can scripts run here?  NO -- PowerShell execution policy is '$POLICY', which blocks the plugin's hooks and scripts."
+  echo "[aem-doctor]   Fix (per-user):  pwsh -Command \"Set-ExecutionPolicy -Scope CurrentUser RemoteSigned\""
+  echo "[aem-doctor]   If the policy is locked by your IT admin (Group Policy), ask them to allow local scripts."
+  echo "[aem-doctor]   The other checks are skipped -- nothing the plugin installs can run until scripts are allowed."
+  echo "[aem-doctor]   Then re-run /aem-doctor for the full report."
+  exit 0
+fi
+
+# Scripts can load -- run the full four-check report.
 pwsh -NoProfile -File "$SCRIPT" -PluginRoot "$PLUGIN_ROOT"
 ```
