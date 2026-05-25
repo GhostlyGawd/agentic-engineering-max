@@ -190,11 +190,21 @@ try {
         -Detail 'the unwired fix is to run /aem-init'
 
     # --- (4a) DYNAMIC Restricted probe: inline -Command answers, loads no .ps1 --
-    $probeRaw = & pwsh -NoProfile -NoLogo -Command "Set-ExecutionPolicy -Scope Process Restricted -Force; (Get-ExecutionPolicy).ToString()"
-    $probe = (($probeRaw -join '') -replace '\s', '')
-    Assert-True -Name '(4a) inline probe returns Restricted under process-scope Restricted' `
-        -Condition ($probe -eq 'Restricted') `
-        -Detail ("probe returned '{0}' (expected Restricted); proves the -Command probe reads a blocking policy without loading a script" -f $probe)
+    # Execution policies are a Windows-only concept. On PS7 for Linux/macOS,
+    # Set-ExecutionPolicy raises "Operation is not supported on this platform"
+    # and Get-ExecutionPolicy is hardwired to 'Unrestricted', so process-scope
+    # Restricted cannot be simulated off-Windows. This dynamic case is therefore
+    # Windows-only (skip, not fail, elsewhere); the static (4b) below proves the
+    # same locked-down contract cross-platform by parsing SKILL.md text.
+    if ($IsWindows) {
+        $probeRaw = & pwsh -NoProfile -NoLogo -Command "Set-ExecutionPolicy -Scope Process Restricted -Force; (Get-ExecutionPolicy).ToString()"
+        $probe = (($probeRaw -join '') -replace '\s', '')
+        Assert-True -Name '(4a) inline probe returns Restricted under process-scope Restricted' `
+            -Condition ($probe -eq 'Restricted') `
+            -Detail ("probe returned '{0}' (expected Restricted); proves the -Command probe reads a blocking policy without loading a script" -f $probe)
+    } else {
+        Write-Host 'SKIP: (4a) process-scope Restricted is Windows-only; not simulable on this platform (static 4b still covers the contract)'
+    }
 }
 finally {
     Remove-Item -Recurse -Force $workRoot -ErrorAction SilentlyContinue
