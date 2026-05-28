@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Control Plane HUD</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <h1>Control Plane HUD</h1>
+    <div class="status">
+      <span id="poll-state" class="pill">connecting...</span>
+      <span id="last-updated" class="muted"></span>
+    </div>
+  </header>
+
+  <nav class="tabs" role="tablist">
+    <button class="tab-btn active" data-tab="tab-loops" role="tab" aria-controls="tab-loops">Loops</button>
+    <button class="tab-btn" data-tab="tab-board" role="tab" aria-controls="tab-board">Board</button>
+    <button class="tab-btn" data-tab="tab-gates" role="tab" aria-controls="tab-gates">Gates <span id="gates-count" class="badge">0</span></button>
+    <button class="tab-btn" data-tab="tab-logs" role="tab" aria-controls="tab-logs">Logs</button>
+  </nav>
+
+  <main>
+    <!-- LOOPS: controller + worker/reviewer heartbeats + Launch/Stop -->
+    <section id="tab-loops" class="tab-panel active" role="tabpanel">
+      <div class="controls">
+        <label for="loops-slug">Slug</label>
+        <input id="loops-slug" type="text" value="control-plane" />
+        <button id="btn-launch" class="btn btn-go">Launch</button>
+        <button id="btn-stop" class="btn btn-stop">Stop</button>
+        <span id="loops-action-result" class="muted"></span>
+      </div>
+      <h2>Controllers</h2>
+      <div id="loops-controllers" class="heartbeat-grid"></div>
+      <h2>Workers</h2>
+      <div id="loops-workers" class="heartbeat-grid"></div>
+      <h2>Reviewers</h2>
+      <div id="loops-reviewers" class="heartbeat-grid"></div>
+      <h2>Controller log tail</h2>
+      <pre id="loops-log-tail" class="log"></pre>
+    </section>
+
+    <!-- BOARD: lineage > slug > goal > epic > task/subtask tree with rollups -->
+    <section id="tab-board" class="tab-panel" role="tabpanel">
+      <div class="controls">
+        <label for="filter-slug">Slug</label>
+        <select id="filter-slug"><option value="">all</option></select>
+        <label for="filter-status">Status</label>
+        <select id="filter-status"><option value="">all</option></select>
+        <label for="filter-gate">Gate</label>
+        <select id="filter-gate">
+          <option value="">all</option>
+          <option value="gated">gated only</option>
+          <option value="ungated">ungated only</option>
+        </select>
+        <label for="filter-kind">Kind</label>
+        <select id="filter-kind"><option value="">all</option></select>
+      </div>
+      <div id="board-tree" class="tree"></div>
+    </section>
+
+    <!-- GATES: the gate_decider == user queue -->
+    <section id="tab-gates" class="tab-panel" role="tabpanel">
+      <p class="muted">Tasks awaiting your decision (gate_decider: user).</p>
+      <div id="gates-list" class="gates-list"></div>
+    </section>
+
+    <!-- LOGS: tail of a selected logs/*.log -->
+    <section id="tab-logs" class="tab-panel" role="tabpanel">
+      <div class="controls">
+        <label for="logs-file">File</label>
+        <input id="logs-file" type="text" placeholder="orchestrator-...log" value="" />
+        <label for="logs-tail">Tail</label>
+        <input id="logs-tail" type="number" min="1" max="2000" value="200" />
+        <button id="btn-logs-refresh" class="btn">Tail</button>
+        <span id="logs-result" class="muted"></span>
+      </div>
+      <pre id="logs-output" class="log"></pre>
+    </section>
+  </main>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

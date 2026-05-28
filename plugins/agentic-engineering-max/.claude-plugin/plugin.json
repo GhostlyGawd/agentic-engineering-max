@@ -1,6 +1,6 @@
 {
   "name": "agentic-engineering-max",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "Plan, build, review: a multi-agent engineering toolkit for Claude Code projects.",
   "license": "MIT",
   "author": {

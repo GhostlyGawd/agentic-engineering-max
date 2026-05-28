@@ -19,7 +19,7 @@
 #    fresh Claude sessions read plan-state.md directly via Glob and never
 #    consult README. README is human-facing convention, not contract.)
 #
-# Sidecar config (optional): ${CLAUDE_PLUGIN_ROOT}/hooks/state-drift-check.config.json
+# Sidecar config (optional): C:\Users\rhenm\.claude\hooks\state-drift-check.config.json
 #   Recognized keys (v1.1):
 #     ledger_state_buffer_minutes      integer  default 5
 #       Tolerance window for the "ledger newer than state" drift check.
@@ -32,15 +32,9 @@
 #       List of agent basenames (no .md) that the agent-existence check should
 #       suppress. Use when planning docs cite historically-deleted agents whose
 #       references survive in the prose for documentation reasons.
-#     allowlist                        array    default []
-#       Repo root paths the hook is allowed to act in. When empty/absent, the
-#       hook acts in whatever repo it resolves from $PWD (default-allow). The
-#       hook only emits read-only drift warnings, so default-allow is safe.
 #   Additional keys are silently ignored. Absent file applies all defaults silently.
 #
-# Allowlist (v1): operator-configurable via the sidecar config 'allowlist' key.
-# Empty/absent allowlist => act in the resolved repo. Configure the key to
-# restrict the hook to specific repo roots.
+# Allowlist (v1): D:\GitHub Projects\Dev_006 only. Other repos no-op silently.
 # Output channel: hookSpecificOutput.additionalContext (raw stdout is dropped).
 # Internal errors: emit [state-drift-check] internal error: <msg>. Never silent-fail.
 
@@ -48,11 +42,13 @@ $ErrorActionPreference = 'Continue'
 $null = [Console]::In.ReadToEnd()
 
 try {
-    # Plugin root for plugin-internal asset references (sidecar config + the
-    # shipped agent files). Prefer the runtime-provided env var; fall back to
-    # this script's own location so the hook also works when run directly.
-    $pluginRoot = $env:CLAUDE_PLUGIN_ROOT
-    if ([string]::IsNullOrWhiteSpace($pluginRoot)) { $pluginRoot = Split-Path -Parent $PSScriptRoot }
+    $allowlist = @('D:\GitHub Projects\Dev_006')  # crosscompat-ok: machine-local hook; this checkout's absolute path intentionally gates activation
+    # Explicit override for tests and alternate checkouts (e.g. a CI clone or a
+    # second worktree at a different path). When set, it REPLACES the default
+    # allowlist so the hook activates against the named root.
+    if ($env:STATE_DRIFT_CHECK_ALLOW_ROOT) {
+        $allowlist = @($env:STATE_DRIFT_CHECK_ALLOW_ROOT)
+    }
 
     # Resolve repo root: walk up from $PWD looking for .git or planning dir.
     $repoRoot = $null
@@ -69,15 +65,22 @@ try {
 
     if (-not $repoRoot) { exit 0 }
 
-    # Sidecar config load (resolved under the plugin root). The optional
-    # 'allowlist' key restricts which repos the hook acts in; absent/empty
-    # means "act in the resolved repo" (default-allow; safe because this hook
-    # only emits read-only drift warnings).
+    # Allowlist check (case-insensitive, trailing-separator tolerant).
+    $norm = $repoRoot.TrimEnd('\','/')
+    $allowed = $false
+    foreach ($entry in $allowlist) {
+        if ($entry.TrimEnd('\','/').Equals($norm, [StringComparison]::OrdinalIgnoreCase)) {
+            $allowed = $true
+            break
+        }
+    }
+    if (-not $allowed) { exit 0 }
+
+    # Sidecar config load.
     $bufferMinutes = 5
     $waveWindowMinutes = 60
     $ignoredMissingAgents = @()
-    $allowlist = @()
-    $configPath = Join-Path $pluginRoot 'hooks/state-drift-check.config.json'
+    $configPath = 'C:\Users\rhenm\.claude\hooks\state-drift-check.config.json'  # crosscompat-ok: machine-local hook; absolute ~/.claude path is intentional this-machine config
     $internalErrors = @()
     if (Test-Path $configPath) {
         try {
@@ -92,27 +95,11 @@ try {
             if ($null -ne $config.ignored_missing_agents) {
                 $ignoredMissingAgents = @($config.ignored_missing_agents)
             }
-            if ($null -ne $config.allowlist) {
-                $allowlist = @($config.allowlist)
-            }
         } catch {
             $msg = $_.Exception.Message -replace "`r?`n", '; '
             if ($msg.Length -gt 300) { $msg = $msg.Substring(0, 297) + '...' }
             $internalErrors += "[state-drift-check] internal error: sidecar config parse: $msg"
         }
-    }
-
-    # Allowlist gate: only enforced when an allowlist is configured.
-    if ($allowlist.Count -gt 0) {
-        $norm = $repoRoot.TrimEnd('\','/')
-        $allowed = $false
-        foreach ($entry in $allowlist) {
-            if ($entry.TrimEnd('\','/').Equals($norm, [StringComparison]::OrdinalIgnoreCase)) {
-                $allowed = $true
-                break
-            }
-        }
-        if (-not $allowed) { exit 0 }
     }
 
     $messages = @()
@@ -190,9 +177,65 @@ try {
             }
             foreach ($agentName in $foundAgents.Keys) {
                 if ($ignoredMissingAgents -contains $agentName) { continue }
-                $agentPath = Join-Path $pluginRoot "agents/$agentName.md"
+                $agentPath = "C:\Users\rhenm\.claude\agents\$agentName.md"  # crosscompat-ok: machine-local hook; absolute ~/.claude path is intentional this-machine config
                 if (-not (Test-Path $agentPath)) {
-                    $messages += "Drift detected: referenced agent $agentName missing at `${CLAUDE_PLUGIN_ROOT}/agents/$agentName.md. Create or rename before next phase (or add it to the sidecar config 'ignored_missing_agents' if it is an operator-local agent)."
+                    $messages += "Drift detected: referenced agent $agentName missing at ~/.claude/agents/$agentName.md. Create or rename before next phase."
+                }
+            }
+
+            # Check E: stale Next-action / Open-PR-stack branch references (ground truth).
+            #   Checks A/B/C verify INTERNAL consistency between planning docs; none
+            #   reads the free-prose Next-action/Open-PR-stack fields against the world.
+            #   The wave-closure nudge below only fires on implementation/wave-N/ path
+            #   commits, so work that lands outside that path (e.g. a bin/-level fix
+            #   round) never trips it. This check closes that gap: if a backtick-quoted
+            #   token in Next-action/Open-PR-stack resolves to a git branch that STILL
+            #   EXISTS and is already merged into main, the field describes work that
+            #   has already landed -- stale. Purely local (no network/gh); a merged-then
+            #   -deleted branch leaves no ref, so past-tense mentions do not false-fire.
+            #   (See state-surface-discipline plan-ledger 2026-05-26 ground-truth entry.)
+            if (Test-Path $statePath) {
+                & git -C $repoRoot show-ref --verify --quiet 'refs/heads/main' 2>$null
+                $mainExists = ($LASTEXITCODE -eq 0)
+                if ($mainExists) {
+                    $stateLines  = Get-Content -Path $statePath -ErrorAction SilentlyContinue
+                    $actionLines = @($stateLines) | Where-Object { $_ -match '(?im)^(Next action|Open-PR stack):' }
+                    $nudgedBranches = @{}
+                    foreach ($line in $actionLines) {
+                        foreach ($tm in [regex]::Matches($line, '`([^`]+)`')) {
+                            $token = $tm.Groups[1].Value.Trim()
+                            if (-not $token) { continue }
+                            if ($token -match '\s') { continue }                                 # branch names have no spaces
+                            if ($token -match '\.\.') { continue }                                # commit range, not a branch
+                            if ($token -match '\.(md|ps1|psd1|json|jsonl|yml|yaml|txt|sh)$') { continue }  # filename
+                            if ($token -match '(?i)^(task-|T-W?\d)') { continue }                 # task id
+                            if ($token -in @('main','master','HEAD','origin/main','origin/HEAD')) { continue }
+                            if ($nudgedBranches.ContainsKey($token)) { continue }
+                            # Past-tense gate: if the line -- minus the branch token
+                            # itself -- frames the branch as already landed, it is a
+                            # historical mention (e.g. "landed via PR #71 (`x`, merged
+                            # 2026-..)"), not pending work. Removing the token first means
+                            # a branch literally named `merged-feature` does not self-gate.
+                            $lineSansToken = $line -replace [regex]::Escape($tm.Value), ' '
+                            if ($lineSansToken -match '(?i)\b(merged|landed|shipped|released|done|complete|completed|closed)\b') { continue }
+                            # Resolve as a real branch: local first, then origin/<token>.
+                            $ref = $null
+                            & git -C $repoRoot show-ref --verify --quiet "refs/heads/$token" 2>$null
+                            if ($LASTEXITCODE -eq 0) {
+                                $ref = $token
+                            } else {
+                                & git -C $repoRoot show-ref --verify --quiet "refs/remotes/origin/$token" 2>$null
+                                if ($LASTEXITCODE -eq 0) { $ref = "origin/$token" }
+                            }
+                            if (-not $ref) { continue }
+                            # Already fully merged into main?
+                            & git -C $repoRoot merge-base --is-ancestor $ref main 2>$null
+                            if ($LASTEXITCODE -eq 0) {
+                                $messages += "Drift detected: plan-state.md in $slug names branch ``$token`` as pending work, but it is already merged into main. Update Next action / Open-PR stack (and delete the merged branch)."
+                                $nudgedBranches[$token] = $true
+                            }
+                        }
+                    }
                 }
             }
         }

@@ -4,6 +4,20 @@ All notable changes to `agentic-engineering-max` are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.0] - 2026-05-28
+
+### Added
+
+- **Control plane**: `/task-create` skill + script for capturing tasks into a project's `inbox/` slug; `gate-schema` + `gate-apply` for approval/promotion gating; `wake-sentinel` primitive; `triage-intake` (deterministic, zero-LLM); `master-board` cross-slug rollup.
+- **Web HUD** (`control-plane-web.ps1` + `webui/`): local HttpListener server with Loops / Board / Gates / Logs pages and a JSON API. Loopback-bound. Windows-first; Linux users get the controller + skills without the HUD.
+- **Reviewer-emits-intake** (T-204): the reviewer can file an intake task into `inbox/` when it spots out-of-scope work. Graceful no-op when no `inbox/` slug exists.
+- **`install-autostart`** script: opt-in HUD autostart.
+
+### Changed
+
+- **Orchestrator dormant-on-drain**: the controller now idles when the dependency graph is empty (and wakes on the wake-sentinel) instead of busy-looping. Existing headless invocations keep working; CPU drops between waves.
+- **State-drift hook gains Check E**: a backtick-quoted branch named in `Next action:` / `Open-PR stack:` that resolves and is already merged into main now triggers a nudge. Past-tense mentions ("landed/merged") stay silent.
+
 ## [2.1.0] - 2026-05-25
 
 ### Added

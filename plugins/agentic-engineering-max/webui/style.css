@@ -1,0 +1,200 @@
+/* webui/style.css -- Control Plane HUD (spec T-302 / D-S13). Vanilla CSS, no
+   framework. Dark, dense, terminal-adjacent. */
+
+:root {
+  --bg: #0d1117;
+  --panel: #161b22;
+  --panel-2: #1c2330;
+  --border: #2d333b;
+  --fg: #e6edf3;
+  --muted: #8b949e;
+  --accent: #2f81f7;
+  --ok: #3fb950;
+  --warn: #d29922;
+  --err: #f85149;
+  --stale: #6e7681;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 14px/1.5 ui-monospace, "Cascadia Code", "Consolas", monospace;
+}
+
+.topbar {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+.topbar h1 { font-size: 18px; margin: 0; }
+.status { display: flex; gap: 10px; align-items: center; }
+
+.muted { color: var(--muted); font-size: 12px; }
+.ok { color: var(--ok); font-size: 12px; }
+.err { color: var(--err); font-size: 12px; }
+.empty { color: var(--muted); font-style: italic; padding: 6px 0; }
+
+.pill {
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  font-size: 12px;
+}
+.pill-ok { color: var(--ok); border-color: var(--ok); }
+.pill-err { color: var(--err); border-color: var(--err); }
+
+/* tabs */
+.tabs {
+  display: flex;
+  gap: 4px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+.tab-btn {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--muted);
+  padding: 10px 16px;
+  cursor: pointer;
+  font: inherit;
+}
+.tab-btn:hover { color: var(--fg); }
+.tab-btn.active { color: var(--fg); border-bottom-color: var(--accent); }
+
+.tab-panel { display: none; padding: 18px; }
+.tab-panel.active { display: block; }
+
+h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin: 18px 0 8px; }
+
+/* controls row */
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 14px;
+}
+.controls label { color: var(--muted); font-size: 12px; }
+input, select, textarea {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--fg);
+  border-radius: 6px;
+  padding: 5px 8px;
+  font: inherit;
+}
+input[type="number"] { width: 80px; }
+
+.btn {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--fg);
+  border-radius: 6px;
+  padding: 6px 14px;
+  cursor: pointer;
+  font: inherit;
+}
+.btn:hover { border-color: var(--accent); }
+.btn-go { border-color: var(--ok); color: var(--ok); }
+.btn-stop { border-color: var(--err); color: var(--err); }
+.btn-link { text-decoration: none; }
+
+/* heartbeats */
+.heartbeat-grid { display: flex; flex-direction: column; gap: 4px; }
+.hb {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.hb-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--stale); flex: none; }
+.hb-alive .hb-dot { background: var(--ok); box-shadow: 0 0 6px var(--ok); }
+.hb-stale .hb-dot { background: var(--err); }
+.hb-id { font-weight: bold; min-width: 160px; }
+
+/* logs / pre */
+.log {
+  background: #010409;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px;
+  max-height: 60vh;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 12.5px;
+  color: #c9d1d9;
+}
+
+/* board tree */
+.tree { display: flex; flex-direction: column; gap: 2px; }
+.node { padding: 2px 0; }
+details.node > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 6px;
+}
+details.node > summary:hover { background: var(--panel); }
+.container-node, .leaf-node { margin-left: 18px; }
+.leaf-node {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+}
+.slug-node { margin-left: 0; }
+.node-title { flex: 1; }
+.kind-tag {
+  font-size: 10px;
+  text-transform: uppercase;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0 5px;
+}
+.progress { color: var(--muted); font-size: 12px; }
+
+/* badges */
+.badge {
+  display: inline-block;
+  font-size: 11px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+}
+.gate-flag { color: var(--warn); border-color: var(--warn); }
+.status-done { color: var(--ok); border-color: var(--ok); }
+.status-closed { color: var(--muted); }
+.status-in_progress, .status-in_review, .status-needs_fixing { color: var(--accent); border-color: var(--accent); }
+.status-escalated { color: var(--err); border-color: var(--err); }
+.status-open, .status-proposed, .status-awaiting_user_approval { color: var(--warn); border-color: var(--warn); }
+
+/* gates */
+.gates-list { display: flex; flex-direction: column; gap: 12px; }
+.gate-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+}
+.gate-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.gate-id { font-weight: bold; }
+.gate-title { margin-bottom: 8px; }
+.gate-notes { width: 100%; resize: vertical; margin-bottom: 8px; }
+.gate-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
