@@ -15,11 +15,9 @@
 # The v1 UserPromptSubmit drift-check at ~/.claude/hooks/state-drift-check.ps1
 # is the documented recovery channel. Nothing else.
 #
-# Repo resolution (v1): the writer acts in whatever git repo it resolves by
-# walking up from $PWD. If $PWD is outside any repo (SessionStart may fire from
-# anywhere), it exits 0 silently with no writes -- a portable plugin has no
-# fixed repo to fall back to. Get-ManagedSlugs further gates writes to repos
-# that actually carry a planning/<slug>/ build.
+# Allowlist (v1): D:\GitHub Projects\Dev_006 only. Out-of-allowlist invocation
+# exits 0 silently with no writes. If $PWD is outside the repo (SessionStart
+# may fire from anywhere), a literal allowlist fallback re-resolves the root.
 #
 # Meaningful-work heuristic (any one TRUE -> we write):
 #   1. git rev-list --count <merge-base..HEAD> on current branch > 0
@@ -65,12 +63,12 @@ $ErrorActionPreference = 'Continue'
 # ---------- Library functions ----------
 
 function Get-AllowedRepoRoot {
-    # Resolve repo root by walking up from $PWD looking for a .git or planning
-    # dir. Returns the resolved repo root, or $null when $PWD is outside any
-    # repo (SessionStart can fire from anywhere). A portable plugin has no
-    # fixed repo to fall back to, so an unresolved root is a silent no-op;
-    # downstream Get-ManagedSlugs further gates writes to repos that actually
-    # carry a planning/<slug>/ build.
+    # Resolve repo root by walking up from $PWD; allowlist-gate against the
+    # known managed repo. If the walk-up fails (e.g., SessionStart fires from
+    # outside the repo), fall back to the literal allowlist entries so the
+    # recovery channel remains observable.
+    $allowlist = @('D:\GitHub Projects\Dev_006')  # crosscompat-ok: machine-local hook; this checkout's absolute path intentionally gates activation
+
     $repoRoot = $null
     $cur = (Get-Location).Path
     while ($cur -and $cur.Length -gt 3) {
@@ -82,7 +80,23 @@ function Get-AllowedRepoRoot {
         if (-not $parent -or $parent -eq $cur) { break }
         $cur = $parent
     }
-    return $repoRoot
+
+    if ($repoRoot) {
+        $norm = $repoRoot.TrimEnd('\','/')
+        foreach ($entry in $allowlist) {
+            if ($entry.TrimEnd('\','/').Equals($norm, [StringComparison]::OrdinalIgnoreCase)) {
+                return $repoRoot
+            }
+        }
+    }
+
+    # Walk-up failed or hit an unallowed root. Try the allowlist literally.
+    foreach ($entry in $allowlist) {
+        if (Test-Path (Join-Path $entry '.git')) {
+            return $entry
+        }
+    }
+    return $null
 }
 
 function Get-StateWriterSessionId {
@@ -211,14 +225,19 @@ function Compute-PlanStateRewrite {
 }
 
 function Build-ReadmeStateBody {
-    # Construct the body that replaces ## Current state's content. Multi-slug
-    # bullet summary derived from each plan-state.md's Status field, plus an
-    # auto-write marker for forensic traceability.
-    param([string]$RepoRoot, [string[]]$Slugs, [string]$IsoStamp)
+    # Construct the body that replaces ## Current state's content: one bullet
+    # per managed slug, derived from each plan-state.md's Status field.
+    #
+    # Deterministic by design (no embedded timestamp): an unchanged regen
+    # produces byte-identical output, which is what lets bin/sync-readme.ps1
+    # and the pre-commit hook regenerate-and-stage this section on every
+    # plan-state change without churn (closes the 2026-05-21 README-lag
+    # FINDING -- see state-surface-discipline plan-ledger 2026-05-23). The
+    # forensic "when this was written" lives in each slug's .state-auto-log,
+    # not in the body.
+    param([string]$RepoRoot, [string[]]$Slugs)
 
     $lines = @()
-    $lines += ''
-    $lines += "(auto-written by state-writer at $IsoStamp)"
     $lines += ''
     foreach ($slug in $Slugs) {
         $statePath = Join-Path $RepoRoot ("planning/" + $slug + "/plan-state.md")
@@ -231,11 +250,12 @@ function Build-ReadmeStateBody {
 }
 
 function Build-ReadmeNextActionBody {
-    param([string]$RepoRoot, [string[]]$Slugs, [string]$IsoStamp)
+    # One bullet per managed slug from its plan-state.md Next action field.
+    # Deterministic (no embedded timestamp) for the same reason as
+    # Build-ReadmeStateBody above.
+    param([string]$RepoRoot, [string[]]$Slugs)
 
     $lines = @()
-    $lines += ''
-    $lines += "(auto-written by state-writer at $IsoStamp; one bullet per managed slug from its plan-state.md Next action field.)"
     $lines += ''
     foreach ($slug in $Slugs) {
         $statePath = Join-Path $RepoRoot ("planning/" + $slug + "/plan-state.md")
@@ -441,8 +461,8 @@ function Invoke-StateWriterCore {
         if ($null -ne $rewritten) { $newContent[$sp] = $rewritten }
     }
 
-    $currentStateBody = Build-ReadmeStateBody -RepoRoot $repoRoot -Slugs $slugs -IsoStamp $isoStamp
-    $nextActionBody   = Build-ReadmeNextActionBody -RepoRoot $repoRoot -Slugs $slugs -IsoStamp $isoStamp
+    $currentStateBody = Build-ReadmeStateBody -RepoRoot $repoRoot -Slugs $slugs
+    $nextActionBody   = Build-ReadmeNextActionBody -RepoRoot $repoRoot -Slugs $slugs
     $readmeRewrite = Compute-ReadmeRewrite -ReadmePath $readmePath `
                                             -CurrentStateBody $currentStateBody `
                                             -NextActionBody $nextActionBody

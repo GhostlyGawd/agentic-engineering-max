@@ -1,27 +1,22 @@
-# STAGED roadmap
+# STAGED roadmap (retired)
 
-`agentic-engineering-max` v1 targets Windows 10/11 + PowerShell 5.1 (or later) +
-Git for Windows. Linux and macOS are **STAGED for v2** -- declared as a roadmap
-item, not deferred indefinitely.
+**Status as of v2.3.0 (2026-05-29):** This document is retired. Its premise --
+"v1 targets Windows + PowerShell 5.1; Linux/macOS support is STAGED for v2" --
+was made obsolete by the v2.0.0 release (2026-05-23), which shipped pure pwsh 7
+cross-platform support for Windows + Linux. The file is preserved as a stub so
+existing bookmarks and external references resolve, but the canonical roadmap
++ history now lives in:
 
-## v2 cross-platform: pre-committed adoption threshold
+- **`CHANGELOG.md`** -- per-release scope and dates.
+- **Pinned issue `[v2-roadmap] Cross-platform support`** -- still the canonical
+  user-facing signal, now scoped to remaining gaps (macOS install reports;
+  platform-specific edge cases) rather than the headline port itself.
 
-Cross-platform v2 is prioritized when EITHER (a) at least 5 distinct GitHub
-issues are opened against `github.com/GhostlyGawd/agentic-engineering-max`
-mentioning macOS or Linux installation problems within any 90-day window since
-v1.0.0, OR (b) the operator reports 3 personal install attempts on a non-Windows
-machine. Whichever fires first.
+## Historical note (what this document used to say)
 
-## Adoption signal
-
-The canonical adoption signal is the pinned tracking issue
-`[v2-roadmap] Cross-platform support (Linux + macOS)` on the public repo. It
-accepts "+1" / "me too" comments and links to install-problem issues mentioning
-macOS or Linux. When the threshold above fires, v2 work begins.
-
-## Why STAGED, not SHIPPED-v1
-
-v1 preserves the dogfooding loop on the operator's Windows + PS 5.1 + Python 3.12
-machine. Cross-platform ports (PowerShell Core 7+, Python rewrite) would either
-break the dogfooding loop or require the operator to acquire a dev environment
-they do not own. v1 ships now; v2 ships when adoption demands it.
+Prior to v2, this document committed the project to a pre-defined adoption
+threshold for the cross-platform port: 5 distinct GitHub issues mentioning
+macOS or Linux install problems within a 90-day window, OR 3 personal install
+attempts by the operator on a non-Windows machine -- whichever fired first.
+That threshold fired in early 2026-05; the cross-platform-v2 build (Dev_006
+internal slug) ran 2026-05-21 through 2026-05-23 and shipped v2.0.0.

@@ -4,6 +4,20 @@ All notable changes to `agentic-engineering-max` are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.0] - 2026-05-29
+
+### Added
+
+- **`/launch-build` skill** (`skills/launch-build/` + `scripts/launch-build.ps1`): launch the 3-department headless build as detached background loops without telling the user to open three terminals. The default plan is one controller + one PM narrator + one auto-pusher. Walks away. Mobile-friendly via GitHub commit notifications.
+- **`headless-pusher-loop.ps1`** (`scripts/`): single push-only loop (`git push origin HEAD` every ~45s) that surfaces the build's local commits to GitHub live. Never commits, no index contention, self-exits when all tasks are done. Wired as a default-on plan member of `/launch-build` (`-NoPush` to suppress).
+
+### Changed
+
+- **State-writer is now render-deterministic** (`hooks/state-writer.ps1`): the embedded render timestamp is removed; regenerating an already-current `plan-state.md` is now a no-op, which lets the pre-commit hook regenerate-and-stage without churn. Matches the workspace version that has been deterministic since 2026-05-23.
+- **`CONTRIBUTING.md`**: `Cross-platform v2 invitation` section rewritten as `Cross-platform notes` reflecting the now-shipped Windows + Linux pwsh 7 target. Test-suite invocation example updated to `pwsh -NoProfile -File tests/run-all-tests.ps1` (no `-ExecutionPolicy Bypass`, no Windows-only backslashes).
+- **`RELEASE_CHECKLIST.md`**: markdown code-fence language tags switched from ` ```powershell ` to ` ```pwsh ` (25 fences) to accurately reflect the pwsh 7 runtime.
+- **`STAGED-ROADMAP.md`** retired to a pointer stub. The cross-platform port shipped in v2.0.0; the document's premise was obsolete. Existing bookmarks still resolve to a short note pointing at CHANGELOG + the pinned v2-roadmap issue.
+
 ## [2.2.0] - 2026-05-28
 
 ### Added

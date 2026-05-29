@@ -18,7 +18,7 @@ If you are unsure whether something is a bug or intended behavior, file it as a 
 1. **Discuss first for non-trivial changes.** Open an issue describing the proposed change before writing code. The plugin packages an opinionated discipline; PRs that change the discipline without discussion are likely to be rejected even if the code is clean.
 2. **Branch from `main`.** Use a topic branch named `feat/<short-slug>`, `fix/<short-slug>`, or `docs/<short-slug>`.
 3. **Make focused commits.** One concern per commit. Use a present-tense summary line under 70 characters; body in full sentences explaining the why.
-4. **Run the test suite.** `powershell -NoProfile -ExecutionPolicy Bypass -File tests\run-all-tests.ps1` must exit 0. If you add a behavior, add a test that fails before your change and passes after.
+4. **Run the test suite.** `pwsh -NoProfile -File tests/run-all-tests.ps1` must exit 0. If you add a behavior, add a test that fails before your change and passes after.
 5. **Match existing style.** Read a few neighboring files in the area you are changing and match conventions (parameter casing, error-handling, frontmatter shape, etc.).
 6. **Open the PR against `main`** with a description that names the issue (if any), summarizes what changed, and lists what was tested.
 
@@ -31,15 +31,14 @@ If you are unsure whether something is a bug or intended behavior, file it as a 
 - **Avoid `2>&1` on native exes in PowerShell 5.1.** It corrupts `$?` and exit handling. Use `2>$null` or capture stderr separately via `Start-Process -RedirectStandardError`.
 - **JSON files: UTF-8 with no BOM.** Default `Out-File` / `Set-Content` write UTF-16 LE -- use `-Encoding utf8` explicitly when writing JSON or other text other tools will read.
 
-## Cross-platform v2 invitation
+## Cross-platform notes
 
-This plugin currently targets Windows 10/11 + PowerShell 5.1 + Git for Windows. Cross-platform support is a v2 roadmap item, not a permanent limit. See [STAGED-ROADMAP.md](./STAGED-ROADMAP.md) for the pre-committed adoption threshold and the canonical signal mechanism (a pinned GitHub tracking issue accepting +1 / "me too" comments).
+As of v2.0.0 (2026-05-23), the plugin runs on **Windows + Linux under pwsh 7**. PowerShell 5.1 is no longer a target. The cross-platform CI matrix (`tests (ubuntu-latest)` + `tests (windows-latest)` + a Linux `aem-init install + pwsh probe`) runs on every PR. macOS is not in the matrix but should work under pwsh 7; reports against the pinned `[v2-roadmap] Cross-platform support` issue describing macOS-specific install behavior are welcome.
 
-If you want to help bring v2 forward, the most useful contributions are:
+Useful contributions on the cross-platform front:
 
-- Reports against the pinned `[v2-roadmap] Cross-platform support (Linux + macOS)` issue describing what install step would have worked on your platform.
-- A spike PR that converts a single PowerShell tool to a portable form (Python or bash) while preserving the existing automated test suite. Land the spike behind a feature flag so v1 installs are unaffected.
-- A test matrix proposal -- what would CI need to look like to validate the cross-platform port without regressing the Windows path.
+- Installation-friction reports on Linux or macOS (open an issue with the `claude --version`, `pwsh --version`, and the failing step).
+- Test cases for platform-specific edge cases (case-sensitivity, line-endings, sentinel-file semantics under different filesystems).
 
 ## Roadmap / dogfooding
 

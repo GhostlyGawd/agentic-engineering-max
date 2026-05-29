@@ -17,7 +17,7 @@ Steps:
 
 1. From the Dev_006 repo root, run the subtree split:
 
-    ```powershell
+    ```pwsh
     git subtree split --prefix=plugin/ -b release/vX.Y.Z
     ```
 
@@ -25,25 +25,25 @@ Steps:
 
 2. Confirm the `public` remote is configured AND points at the correct repo, then push the release branch:
 
-    ```powershell
+    ```pwsh
     git remote -v | Select-String -Pattern '^public\s+https://github\.com/GhostlyGawd/agentic-engineering-max(\.git)?\s'
     ```
 
    Expected: at least one matching line. The pattern requires both the remote NAME (`public`) and the expected URL on the same line, so a `public` remote pointed at the wrong repo will NOT match (returns empty). If empty, configure first:
 
-    ```powershell
+    ```pwsh
     git remote add public https://github.com/GhostlyGawd/agentic-engineering-max.git
     ```
 
    Then push:
 
-    ```powershell
+    ```pwsh
     git push public release/vX.Y.Z:refs/heads/release/vX.Y.Z
     ```
 
 3. Clone the public repo into a fresh temp dir:
 
-    ```powershell
+    ```pwsh
     $tmp = Join-Path $env:TEMP ("aem-release-smoke-" + (Get-Random))
     git clone --branch release/vX.Y.Z https://github.com/GhostlyGawd/agentic-engineering-max.git $tmp
     Set-Location $tmp
@@ -51,7 +51,7 @@ Steps:
 
 4. (Informational only -- the binary gate is Step 5.) Eyeball the top-level for orientation:
 
-    ```powershell
+    ```pwsh
     Get-ChildItem -Force
     ```
 
@@ -61,7 +61,7 @@ Steps:
 
    5a. Top-level allowlist check (AUTHORITATIVE gate -- catches ANY unexpected top-level entry, including future-renamed internal dirs the denylist below would miss):
 
-    ```powershell
+    ```pwsh
     $expectedTop = @('.claude-plugin', 'plugins', '.git', 'README.md', 'LICENSE', 'CHANGELOG.md', 'CONTRIBUTING.md', '.gitignore')
     Get-ChildItem -Force | Where-Object { $_.Name -notin $expectedTop }
     ```
@@ -70,7 +70,7 @@ Steps:
 
    5b. Recursive forbidden-directory deep check (defense-in-depth; catches a forbidden dir nested anywhere outside the plugin's own tree):
 
-    ```powershell
+    ```pwsh
     Get-ChildItem -Recurse -Directory -Force | Where-Object { $_.Name -in @('planning','tasks','handoffs','bin','tests') -and $_.FullName -notlike '*\plugins\agentic-engineering-max\*' }
     ```
 
@@ -78,7 +78,7 @@ Steps:
 
    5c. Content-based check (catches internal-tracking filenames anywhere in the tree):
 
-    ```powershell
+    ```pwsh
     Get-ChildItem -Recurse -File | Select-String -Pattern 'plan-ledger\.md|plan-state\.md|task-board\.md' -List
     ```
 
@@ -86,7 +86,7 @@ Steps:
 
 6. Cleanup:
 
-    ```powershell
+    ```pwsh
     Set-Location ..
     Remove-Item -Recurse -Force $tmp
     git push public --delete release/vX.Y.Z
@@ -103,7 +103,7 @@ Steps:
 
 1. Create a fresh temp project and initialize git:
 
-    ```powershell
+    ```pwsh
     $proj = Join-Path $env:TEMP ("aem-uninstall-smoke-" + (Get-Random))
     New-Item -ItemType Directory -Path $proj | Out-Null
     Set-Location $proj
@@ -114,7 +114,7 @@ Steps:
 
 2. Confirm there is no prior `core.hooksPath` set:
 
-    ```powershell
+    ```pwsh
     git config --get core.hooksPath
     ```
 
@@ -130,7 +130,7 @@ Steps:
 
 4. Confirm `/aem-init` set `core.hooksPath`:
 
-    ```powershell
+    ```pwsh
     git config --get core.hooksPath
     ```
 
@@ -138,7 +138,7 @@ Steps:
 
 5. Make a test commit to verify hooks fire:
 
-    ```powershell
+    ```pwsh
     Set-Content test.txt "hello" -Encoding UTF8
     git add test.txt
     git commit -q -m "smoke commit"
@@ -156,7 +156,7 @@ Steps:
 
 7. Diagnostic probe -- observe `core.hooksPath` with NO remediation between Step 6 and this probe. This records the true effect of `/plugin uninstall` alone:
 
-    ```powershell
+    ```pwsh
     git config --get core.hooksPath
     ```
 
@@ -166,7 +166,7 @@ Steps:
 
 8. Step 2 of the documented uninstall -- run the manual unset exactly as the shipped README instructs the operator to:
 
-    ```powershell
+    ```pwsh
     git config --unset core.hooksPath
     ```
 
@@ -174,7 +174,7 @@ Steps:
 
 9. Pass-gate probe -- confirm the FULL documented procedure left no stale config:
 
-    ```powershell
+    ```pwsh
     git config --get core.hooksPath
     ```
 
@@ -182,7 +182,7 @@ Steps:
 
 10. Confirm a subsequent `git commit` still works (no orphan hook reference left behind):
 
-    ```powershell
+    ```pwsh
     Set-Content test2.txt "world" -Encoding UTF8
     git add test2.txt
     git commit -q -m "post-uninstall smoke commit"
@@ -192,7 +192,7 @@ Steps:
 
 11. Cleanup:
 
-    ```powershell
+    ```pwsh
     Set-Location ..
     Remove-Item -Recurse -Force $proj
     ```
@@ -207,7 +207,7 @@ Steps:
 
 1. Check `plugin/plugins/agentic-engineering-max/assets/demo.gif` file size:
 
-    ```powershell
+    ```pwsh
     (Get-Item 'plugin\plugins\agentic-engineering-max\assets\demo.gif').Length
     ```
 
@@ -215,7 +215,7 @@ Steps:
 
 2. Check each screenshot under `plugin/plugins/agentic-engineering-max/assets/screenshots/`:
 
-    ```powershell
+    ```pwsh
     Get-ChildItem 'plugin\plugins\agentic-engineering-max\assets\screenshots\*.png' | Select-Object Name, Length
     ```
 
@@ -251,7 +251,7 @@ Procedure (surgical patch, NOT a subtree split):
 
 2. Fresh-clone the public repo's release branch into a temp dir (a fresh clone has its own `.git` and no `core.hooksPath`, so the Dev_006 pre-commit hooks -- which reference a `bin/` absent from the flattened public tree -- do not interfere):
 
-    ```powershell
+    ```pwsh
     $tmp = Join-Path $env:TEMP ("aem-public-hotfix-" + (Get-Random))
     git clone --quiet --branch main https://github.com/GhostlyGawd/agentic-engineering-max.git $tmp
     ```
@@ -260,21 +260,21 @@ Procedure (surgical patch, NOT a subtree split):
 
 4. Stage and CONFIRM the staged diff is exactly the intended file set (this is the gate against accidental over-publish):
 
-    ```powershell
+    ```pwsh
     git -C $tmp add -A
     git -C $tmp diff --cached --stat   # must list ONLY the intended files
     ```
 
 5. Commit and push to public `main`:
 
-    ```powershell
+    ```pwsh
     git -C $tmp commit -m "fix: <summary>"
     git -C $tmp push origin main
     ```
 
 6. Verify the live public `main` HEAD now carries the fix, then clean up:
 
-    ```powershell
+    ```pwsh
     git -C $tmp show HEAD:plugins/agentic-engineering-max/.claude-plugin/plugin.json
     Remove-Item -Recurse -Force $tmp
     ```
