@@ -4,6 +4,21 @@ All notable changes to `agentic-engineering-max` are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.0] - 2026-05-30
+
+### Changed
+
+- **The state-drift hook now works for consumers** (`hooks/state-drift-check.ps1`): v1 hard-coded a single author-machine path as its activation allowlist (`D:\GitHub Projects\Dev_006`), so the hook silently no-opped on every other machine -- it had never actually run for anyone who installed the plugin. It now activates on the nearest repo root (walk-up from the working directory, same convention as `state-writer.ps1`) and no-ops only when you are outside any repo. Set `STATE_DRIFT_CHECK_ALLOW_ROOT` to pin activation to a single checkout. Machine-specific paths for the optional sidecar config and the Check-C agent lookup are now resolved from your home directory (`~/.claude/...`) and, for referenced agents, also from the plugin's own `agents/`. **Upgrade note:** because the hook was previously inert, after upgrading you may start seeing amber drift nudges at the top of responses in repos that use the `planning/<slug>/` convention. They are advisory only and never block.
+
+### Added
+
+- **Three drift checks ported from the source workspace** into the plugin hook (they had been workspace-only):
+  - **Check E (plain-text branches):** a `Next action:` / `Open-PR stack:` branch named without backticks (e.g. `build/feature -> main opened`) that is already merged into `main` now nudges, alongside the existing backtick-quoted detection. A past-tense gate keeps historical "landed/merged" mentions silent; non-branch slashy tokens (URLs, paths) are filtered by a local git-ref check.
+  - **Check F (post-merge lifecycle staleness):** when a `build/`/`release/`/`publish/<slug>` branch is merged into `main` but the slug's `Lifecycle stage:` is still non-terminal, the hook nudges to update it.
+  - **Check G (gate-surface drift):** when a `Next action:` still tells you to approve/decline gate findings but the gate queue has actually drained (all decided), the hook nudges to refresh the surface. A reconciled status report carrying no imperative stays silent.
+- **`docs/hooks.md`** rewritten for the drift hook: documents all seven checks (A/B/C/E/F/G + wave-closure) and the new activation model (the prior text described only the v1 ledger/state comparison).
+- **`tests/test-state-drift-check.ps1`**: plugin-side regression test locking generic activation (the hook fires with no allowlist pin), the optional pin (a mismatched pin no-ops), and Check G (NUDGE on a drained queue + the false-positive guard).
+
 ## [2.3.1] - 2026-05-30
 
 ### Fixed

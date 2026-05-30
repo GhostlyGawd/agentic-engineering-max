@@ -74,15 +74,26 @@ If the prior session was already reflected (normal case), the sweep exits silent
 
 ## state-drift-check.ps1 (UserPromptSubmit)
 
-**Path:** `~/.claude/hooks/state-drift-check.ps1`
+**Path:** `${CLAUDE_PLUGIN_ROOT}/hooks/state-drift-check.ps1` (wired via `hooks/hooks.json`).
 
 **Trigger event:** `UserPromptSubmit` — fires on every user prompt submission in a session.
 
-**Allowlist:** Slug-scoped. No-ops outside it.
+**Activation:** Resolves the repo by walking up from the working directory to the nearest `.git`/`planning` root, and no-ops silently outside any repo (same convention as `state-writer.ps1`). Set the optional `STATE_DRIFT_CHECK_ALLOW_ROOT` environment variable to pin activation to a single checkout. (Before 2.4.0 the hook carried a hard-coded author-machine allowlist and therefore no-opped for every consumer; 2.4.0 genericized it.)
 
-**Purpose:** Detects divergence between `plan-ledger.md` (append-only decision history) and `plan-state.md` (current state surface). This is the existing v1 drift-check hook; it was not modified as part of the orchestrator-and-build-system build.
+**Purpose:** Surfaces drift between a project's `planning/<slug>/` documents and ground truth, across seven checks:
 
-**Mechanism:** On each prompt, the hook compares the latest version marker in `plan-ledger.md` against the `Latest spec version:` field in `plan-state.md`. If they diverge, the hook surfaces the gap via `hookSpecificOutput.additionalContext` — a string that appears at the top of the next AI response as an amber warning. This is the only recovery channel for ledger/state drift.
+| Check | Catches |
+|---|---|
+| A | `plan-ledger.md` newer than `plan-state.md` (a ledger edit not yet reflected in state) |
+| B | version-pointer drift — `Latest PRD/spec version` in `plan-state.md` vs the `prd.md`/`spec.md` frontmatter |
+| C | a referenced `agents/<name>.md` that exists in neither the consumer's `~/.claude/agents/` nor the plugin's `agents/` |
+| E | a `Next action:` / `Open-PR stack:` branch token (backtick-quoted **or** plain-text slashy) that resolves to a ref already merged into `main` — with a past-tense gate so historical "landed/merged" mentions stay silent |
+| F | a `build/`/`release/`/`publish/<slug>` branch merged into `main` while the slug's `Lifecycle stage:` is still non-terminal |
+| G | a `Next action:` that still tells the operator to approve/decline gate findings after the gate queue has drained (all decided) |
+
+Plus a wave-closure nudge: a `planning/<slug>/implementation/wave-N/` commit in the recent window with no matching `plan-state.md` update suggests the wave was closed without refreshing state.
+
+**Mechanism:** Checks A–C/G read planning files directly; checks E/F resolve git refs locally (no network, no `gh`). Drift is surfaced via `hookSpecificOutput.additionalContext` — a string injected at the top of the next AI response as an amber warning. The hook never writes files and never commits.
 
 **Output channel:** `hookSpecificOutput.additionalContext` (injected into the AI context, not terminal stdout). The hook does not write files and does not commit.
 

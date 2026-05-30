@@ -11,15 +11,17 @@
 #   drift, and missing referenced agents; nudge for wave-closer when an
 #   implementation wave appears closed.
 #
-# Checks (post v1.1 / next-wave PR1 cleanup):
+# Checks:
 #   A. ledger-newer-than-state
 #   B. version-pointer drift (PRD + spec)
-#   C. missing referenced agents
-#   (Former Check D / README schema removed 2026-05-12: live testing showed
-#    fresh Claude sessions read plan-state.md directly via Glob and never
-#    consult README. README is human-facing convention, not contract.)
+#   C. missing referenced agents (consumer ~/.claude/agents OR plugin agents/)
+#   E. stale Next-action/Open-PR-stack branch already merged into main
+#   F. post-merge Lifecycle stage staleness (build|release|publish/<slug> merged)
+#   G. gate-surface drift (gate queue drained but Next-action says "go decide")
+#   (Former Check D / README schema removed 2026-05-12: fresh Claude sessions
+#    read plan-state.md directly via Glob and never consult README.)
 #
-# Sidecar config (optional): C:\Users\rhenm\.claude\hooks\state-drift-check.config.json
+# Sidecar config (optional): <user-home>/.claude/hooks/state-drift-check.config.json
 #   Recognized keys (v1.1):
 #     ledger_state_buffer_minutes      integer  default 5
 #       Tolerance window for the "ledger newer than state" drift check.
@@ -34,7 +36,10 @@
 #       references survive in the prose for documentation reasons.
 #   Additional keys are silently ignored. Absent file applies all defaults silently.
 #
-# Allowlist (v1): D:\GitHub Projects\Dev_006 only. Other repos no-op silently.
+# Activation: ships with the plugin; activates on the nearest repo root (walk-up
+#   from $PWD), no-ops silently outside any repo. STATE_DRIFT_CHECK_ALLOW_ROOT
+#   pins activation to one root if set. (v1 shipped a hard-coded machine
+#   allowlist that no-opped for every consumer; genericized in 2.4.0.)
 # Output channel: hookSpecificOutput.additionalContext (raw stdout is dropped).
 # Internal errors: emit [state-drift-check] internal error: <msg>. Never silent-fail.
 
@@ -42,13 +47,12 @@ $ErrorActionPreference = 'Continue'
 $null = [Console]::In.ReadToEnd()
 
 try {
-    $allowlist = @('D:\GitHub Projects\Dev_006')  # crosscompat-ok: machine-local hook; this checkout's absolute path intentionally gates activation
-    # Explicit override for tests and alternate checkouts (e.g. a CI clone or a
-    # second worktree at a different path). When set, it REPLACES the default
-    # allowlist so the hook activates against the named root.
-    if ($env:STATE_DRIFT_CHECK_ALLOW_ROOT) {
-        $allowlist = @($env:STATE_DRIFT_CHECK_ALLOW_ROOT)
-    }
+    # Activation: this hook ships with the plugin, so it activates on whatever
+    # repo the session is in -- the nearest .git/planning root found by walking
+    # up from $PWD (same convention as state-writer.ps1). It no-ops silently
+    # when $PWD is outside any repo. The optional STATE_DRIFT_CHECK_ALLOW_ROOT
+    # env var PINS activation to a single root (used by the regression tests;
+    # also lets a consumer scope the hook to one checkout if they want).
 
     # Resolve repo root: walk up from $PWD looking for .git or planning dir.
     $repoRoot = $null
@@ -65,22 +69,20 @@ try {
 
     if (-not $repoRoot) { exit 0 }
 
-    # Allowlist check (case-insensitive, trailing-separator tolerant).
-    $norm = $repoRoot.TrimEnd('\','/')
-    $allowed = $false
-    foreach ($entry in $allowlist) {
-        if ($entry.TrimEnd('\','/').Equals($norm, [StringComparison]::OrdinalIgnoreCase)) {
-            $allowed = $true
-            break
-        }
+    # Optional pin: if STATE_DRIFT_CHECK_ALLOW_ROOT is set, only activate when
+    # the resolved repo root matches it (case-insensitive, trailing-separator
+    # tolerant). Unset => activate on any resolved repo root.
+    if ($env:STATE_DRIFT_CHECK_ALLOW_ROOT) {
+        $norm = $repoRoot.TrimEnd('\','/')
+        $pin  = $env:STATE_DRIFT_CHECK_ALLOW_ROOT.TrimEnd('\','/')
+        if (-not $pin.Equals($norm, [StringComparison]::OrdinalIgnoreCase)) { exit 0 }
     }
-    if (-not $allowed) { exit 0 }
 
     # Sidecar config load.
     $bufferMinutes = 5
     $waveWindowMinutes = 60
     $ignoredMissingAgents = @()
-    $configPath = 'C:\Users\rhenm\.claude\hooks\state-drift-check.config.json'  # crosscompat-ok: machine-local hook; absolute ~/.claude path is intentional this-machine config
+    $configPath = Join-Path $HOME (Join-Path '.claude' (Join-Path 'hooks' 'state-drift-check.config.json'))
     $internalErrors = @()
     if (Test-Path $configPath) {
         try {
@@ -177,9 +179,15 @@ try {
             }
             foreach ($agentName in $foundAgents.Keys) {
                 if ($ignoredMissingAgents -contains $agentName) { continue }
-                $agentPath = "C:\Users\rhenm\.claude\agents\$agentName.md"  # crosscompat-ok: machine-local hook; absolute ~/.claude path is intentional this-machine config
-                if (-not (Test-Path $agentPath)) {
-                    $messages += "Drift detected: referenced agent $agentName missing at ~/.claude/agents/$agentName.md. Create or rename before next phase."
+                # A referenced agent may live in the consumer's ~/.claude/agents/
+                # OR be one this plugin ships under ${CLAUDE_PLUGIN_ROOT}/agents/.
+                # Present in EITHER location => no drift.
+                $agentFound = Test-Path (Join-Path $HOME (Join-Path '.claude' (Join-Path 'agents' "$agentName.md")))
+                if (-not $agentFound -and $env:CLAUDE_PLUGIN_ROOT) {
+                    $agentFound = Test-Path (Join-Path $env:CLAUDE_PLUGIN_ROOT (Join-Path 'agents' "$agentName.md"))
+                }
+                if (-not $agentFound) {
+                    $messages += "Drift detected: referenced agent $agentName missing (not in ~/.claude/agents/ or the plugin's agents/). Create or rename before next phase."
                 }
             }
 
@@ -188,12 +196,18 @@ try {
             #   reads the free-prose Next-action/Open-PR-stack fields against the world.
             #   The wave-closure nudge below only fires on implementation/wave-N/ path
             #   commits, so work that lands outside that path (e.g. a bin/-level fix
-            #   round) never trips it. This check closes that gap: if a backtick-quoted
-            #   token in Next-action/Open-PR-stack resolves to a git branch that STILL
-            #   EXISTS and is already merged into main, the field describes work that
-            #   has already landed -- stale. Purely local (no network/gh); a merged-then
+            #   round) never trips it. This check closes that gap: if a token in
+            #   Next-action/Open-PR-stack resolves to a git branch that STILL EXISTS
+            #   and is already merged into main, the field describes work that has
+            #   already landed -- stale. Purely local (no network/gh); a merged-then
             #   -deleted branch leaves no ref, so past-tense mentions do not false-fire.
-            #   (See state-surface-discipline plan-ledger 2026-05-26 ground-truth entry.)
+            #   2026-05-28: extended to also catch PLAIN-TEXT slashy branch tokens
+            #   (e.g. 'build/control-plane' mentioned without backticks). The v2.2.0
+            #   control-plane drift sat undetected because Check E v1 only matched
+            #   `backtick-quoted` tokens. The git-ref existence check is still the
+            #   strongest filter -- a slashy token that does not resolve as a real
+            #   branch is silently dropped.
+            #   (See state-surface-discipline plan-ledger 2026-05-26 + 2026-05-28.)
             if (Test-Path $statePath) {
                 & git -C $repoRoot show-ref --verify --quiet 'refs/heads/main' 2>$null
                 $mainExists = ($LASTEXITCODE -eq 0)
@@ -202,8 +216,26 @@ try {
                     $actionLines = @($stateLines) | Where-Object { $_ -match '(?im)^(Next action|Open-PR stack):' }
                     $nudgedBranches = @{}
                     foreach ($line in $actionLines) {
+                        # Collect candidate tokens from BOTH match modes. Each entry
+                        # carries the token + the full-match string (used to remove
+                        # the token from the line before applying the past-tense gate
+                        # so a branch literally named "merged-feature" does not
+                        # self-gate).
+                        $candidates = New-Object System.Collections.Generic.List[object]
                         foreach ($tm in [regex]::Matches($line, '`([^`]+)`')) {
-                            $token = $tm.Groups[1].Value.Trim()
+                            $candidates.Add([pscustomobject]@{ Token = $tm.Groups[1].Value.Trim(); FullMatch = $tm.Value })
+                        }
+                        # Plain-text slashy tokens: lowercase-letter start, then
+                        # [a-z0-9_-]+, '/', then [a-z][a-z0-9._/-]*. Lookbehind
+                        # rejects tokens that are inside backticks (handled above),
+                        # part of a longer word/identifier, or a continuation of a
+                        # longer slashy path. Lookahead rejects backtick/word-char
+                        # continuation.
+                        foreach ($tm in [regex]::Matches($line, '(?<![`\w/])[a-z][a-z0-9_-]*\/[a-z][a-z0-9._\/-]*(?![`\w])')) {
+                            $candidates.Add([pscustomobject]@{ Token = $tm.Value.Trim(); FullMatch = $tm.Value })
+                        }
+                        foreach ($cand in $candidates) {
+                            $token = $cand.Token
                             if (-not $token) { continue }
                             if ($token -match '\s') { continue }                                 # branch names have no spaces
                             if ($token -match '\.\.') { continue }                                # commit range, not a branch
@@ -214,9 +246,8 @@ try {
                             # Past-tense gate: if the line -- minus the branch token
                             # itself -- frames the branch as already landed, it is a
                             # historical mention (e.g. "landed via PR #71 (`x`, merged
-                            # 2026-..)"), not pending work. Removing the token first means
-                            # a branch literally named `merged-feature` does not self-gate.
-                            $lineSansToken = $line -replace [regex]::Escape($tm.Value), ' '
+                            # 2026-..)"), not pending work.
+                            $lineSansToken = $line -replace [regex]::Escape($cand.FullMatch), ' '
                             if ($lineSansToken -match '(?i)\b(merged|landed|shipped|released|done|complete|completed|closed)\b') { continue }
                             # Resolve as a real branch: local first, then origin/<token>.
                             $ref = $null
@@ -231,10 +262,130 @@ try {
                             # Already fully merged into main?
                             & git -C $repoRoot merge-base --is-ancestor $ref main 2>$null
                             if ($LASTEXITCODE -eq 0) {
-                                $messages += "Drift detected: plan-state.md in $slug names branch ``$token`` as pending work, but it is already merged into main. Update Next action / Open-PR stack (and delete the merged branch)."
+                                $messages += "Drift detected: plan-state.md in $slug names branch '$token' as pending work, but it is already merged into main. Update Next action / Open-PR stack (and delete the merged branch)."
                                 $nudgedBranches[$token] = $true
                             }
                         }
+                    }
+                }
+            }
+
+            # Check F: post-merge Lifecycle stage staleness (2026-05-28).
+            #   When a build/<slug>, release/<slug>, or publish/<slug> branch is
+            #   merged into main but plan-state.md's Lifecycle stage is still
+            #   non-terminal, the project shipped but plan-state was never updated.
+            #   Complementary to Check E: Check E nudges when a Next-action mentions
+            #   a merged branch; Check F nudges when the lifecycle stage itself is
+            #   stale. Either signal catches the drift; together they double-cover
+            #   the post-ship state-refresh obligation. Terminal-vocabulary check
+            #   mirrors bin/gen-planning-index.ps1's Get-StageClass (the canonical
+            #   single source of truth for the Lifecycle stage vocabulary lives in
+            #   CLAUDE.md "Planning - Lifecycle stage vocabulary"; both files apply
+            #   the same rule).
+            if (Test-Path $statePath) {
+                & git -C $repoRoot show-ref --verify --quiet 'refs/heads/main' 2>$null
+                $mainExistsF = ($LASTEXITCODE -eq 0)
+                if ($mainExistsF) {
+                    $stage = $null
+                    foreach ($l in (Get-Content -Path $statePath -ErrorAction SilentlyContinue)) {
+                        if ($l -match '^\s*Lifecycle stage:\s*(.+?)\s*$') {
+                            $stage = ($Matches[1] -replace '\*', '').Trim()
+                            break
+                        }
+                    }
+                    if ($stage) {
+                        $shortStage = $stage
+                        $emdash = [char]0x2014
+                        foreach ($d in @((' ' + $emdash), ' - ', '. ')) {
+                            $idx = $shortStage.IndexOf($d)
+                            if ($idx -ge 0) { $shortStage = $shortStage.Substring(0, $idx) }
+                        }
+                        $shortStage = $shortStage.Trim().TrimEnd('.')
+                        # Terminal: Built/Shipped/Archived (canonical) + Done/Released/Complete (legacy aliases).
+                        $isTerminal = $shortStage -match '(?i)^(built|shipped|archived|done|released|complete)\b'
+                        if (-not $isTerminal) {
+                            foreach ($prefix in @('build', 'release', 'publish')) {
+                                $cand = "$prefix/$slug"
+                                $ref = $null
+                                & git -C $repoRoot show-ref --verify --quiet "refs/heads/$cand" 2>$null
+                                if ($LASTEXITCODE -eq 0) { $ref = $cand }
+                                else {
+                                    & git -C $repoRoot show-ref --verify --quiet "refs/remotes/origin/$cand" 2>$null
+                                    if ($LASTEXITCODE -eq 0) { $ref = "origin/$cand" }
+                                }
+                                if (-not $ref) { continue }
+                                & git -C $repoRoot merge-base --is-ancestor $ref main 2>$null
+                                if ($LASTEXITCODE -eq 0) {
+                                    $messages += "Drift detected: branch '$cand' for $slug is merged into main, but plan-state.md Lifecycle stage is still '$shortStage' (non-terminal). Update to a terminal stage (Built/Shipped/Archived)."
+                                    break  # one nudge per slug, even if multiple candidate branches match
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            # Check G: gate-surface drift.
+            #   The gate-decision path (scripts/gate-apply.ps1, or a direct
+            #   task-frontmatter edit) marks a finding decided -- gate_state
+            #   approved|declined, status terminal -- but does NOT touch
+            #   plan-state.md. So a Next-action that tells the operator to
+            #   "approve or decline the proposed findings" can outlive the queue
+            #   it points at. Detection mirrors Check E/F: a cheap text
+            #   pre-filter (an imperative approve/decline aimed at a
+            #   proposed/pending gate finding) gates a ground-truth scan. The
+            #   pending-gate predicate (gate_decider == 'user' AND effective
+            #   gate_state == 'pending', absent state => pending) mirrors
+            #   scripts/gate-schema.ps1 Get-GateQueue, the canonical reader --
+            #   inlined to keep the hook self-contained (same precedent as
+            #   Check F mirroring Get-StageClass). Fires only when the slug HAS
+            #   gate tasks but NONE are still pending: a drained queue with a
+            #   stale "go decide them" instruction. A non-empty queue
+            #   (instruction accurate) or a slug with no gates at all stays
+            #   silent.
+            if (Test-Path $statePath) {
+                $nextActionLinesG = @(Get-Content -Path $statePath -ErrorAction SilentlyContinue) |
+                    Where-Object { $_ -match '(?im)^Next action:' }
+                $staleGateInstruction = $false
+                foreach ($naLine in $nextActionLinesG) {
+                    # Anchored on an approve/decline verb within one sentence of a
+                    # gate/finding noun, so a STATUS report ("all findings
+                    # decided; queue empty") -- no imperative -- does not match.
+                    if ($naLine -match '(?i)\b(approve|decline)\b[^.]{0,100}\b(gates?|findings?|intake|proposed|pending)\b' -or
+                        $naLine -match '(?i)\b(proposed|pending)\b[^.]{0,60}\b(gates?|findings?|intake)\b[^.]{0,60}\b(approve|decline)\b') {
+                        $staleGateInstruction = $true
+                        break
+                    }
+                }
+                if ($staleGateInstruction) {
+                    $tasksDirG = Join-Path $pd.FullName 'tasks'
+                    $gateTasksTotal = 0
+                    $pendingGates = 0
+                    if (Test-Path $tasksDirG) {
+                        foreach ($tf in @(Get-ChildItem -Path $tasksDirG -Filter 'task-*.md' -File -ErrorAction SilentlyContinue)) {
+                            $rawG = Get-Content -Raw -Path $tf.FullName -ErrorAction SilentlyContinue
+                            if (-not $rawG) { continue }
+                            $flines = $rawG -split "`r?`n"
+                            if ($flines.Count -lt 3 -or $flines[0].Trim() -ne '---') { continue }
+                            $decider = ''
+                            $gstate = ''
+                            for ($gi = 1; $gi -lt $flines.Count; $gi++) {
+                                if ($flines[$gi].Trim() -eq '---') { break }
+                                if ($flines[$gi] -match '^\s*gate_decider:\s*(.*)$') {
+                                    $decider = $matches[1].Trim().Trim('"', "'").ToLowerInvariant()
+                                } elseif ($flines[$gi] -match '^\s*gate_state:\s*(.*)$') {
+                                    $gstate = $matches[1].Trim().Trim('"', "'").ToLowerInvariant()
+                                }
+                            }
+                            if (-not $decider) { continue }
+                            $gateTasksTotal++
+                            # D-S1 default: absent gate_state => pending when a decider is set.
+                            if (-not $gstate) { $gstate = 'pending' }
+                            if ($decider -eq 'user' -and $gstate -eq 'pending') { $pendingGates++ }
+                        }
+                    }
+                    if ($gateTasksTotal -gt 0 -and $pendingGates -eq 0) {
+                        $messages += "Drift detected: plan-state.md Next action in $slug still instructs approving/declining proposed gate findings, but the gate queue is empty (all decided). Update Next action so the surface reflects the drained queue."
                     }
                 }
             }
