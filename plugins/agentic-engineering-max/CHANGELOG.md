@@ -4,6 +4,15 @@ All notable changes to `agentic-engineering-max` are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.1] - 2026-05-30
+
+### Fixed
+
+- **Gates queue never drained** (`scripts/gate-schema.ps1`): `Get-GateQueue` filtered on `gate_decider == 'user'` alone, so a gate stayed in the control-plane web HUD's Gates tab forever even after approve/decline -- defeating the tab's purpose. Now also requires `gate_state == 'pending'`; decided gates (`approved`/`declined`) leave the queue and the tab drains as the user acts. (Shipped buggy since 2.2.0.)
+- **Board mislabeled gate statuses** (`scripts/build-board.ps1`): the board generator predated the control-plane gate statuses and bucketed `proposed` / `awaiting_user_approval` / `closed` into `open` with an "unknown status" warning -- so a declined/closed finding masqueraded as an open task and proposed findings polluted the open/blocked view. Now mirrors `master-board.ps1` semantics: `closed` is terminal (like `done`); `proposed` + `awaiting_user_approval` are gate-pending (render in their own sections, keep the board active). The genuine-typo guard is preserved. (Shipped buggy since 2.2.0.)
+
+Both were surfaced by dogfooding the control plane in the source workspace and are locked there by regression tests (`test-control-plane-schema.ps1` decided-gate-excluded case; new `test-build-board.ps1`, 12 cases).
+
 ## [2.3.0] - 2026-05-29
 
 ### Added

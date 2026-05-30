@@ -13,6 +13,7 @@
 #   Plus two predicate helpers:
 #     - Test-IsContainer -Kind <k> : true for goal/epic (never claimable, D-S3)
 #     - Get-GateQueue -Slug <s>    : every gate_decider == user task in a slug
+#                                    that is still pending (gate_state == pending)
 #
 # Decisions:
 #   D-S1 (flat additive schema keys; line-oriented parser, no nested maps)
@@ -168,9 +169,14 @@ function Test-IsContainer {
     return ($k -eq 'goal' -or $k -eq 'epic')
 }
 
-# Every task in a slug whose gate_decider is 'user' -- the queue the web HUD's
-# Gates tab and the gate mutator reason about. Each returned object is the
-# parsed frontmatter augmented with a TaskFile path note-property.
+# The ACTIONABLE user-decision queue: every task in a slug whose gate_decider is
+# 'user' AND whose gate is still pending a decision (gate_state == 'pending').
+# Once a gate is decided -- approve sets gate_state 'approved', decline sets
+# 'declined' (gate-apply.ps1) -- it leaves the queue, so the web HUD's Gates tab
+# drains as the user acts. (Before 2026-05-30 this filtered on gate_decider
+# alone, so decided gates never left the queue; locked by the decided-gate-
+# excluded case in tests/test-control-plane-schema.ps1.) Each returned object is
+# the parsed frontmatter augmented with a TaskFile path note-property.
 function Get-GateQueue {
     param([Parameter(Mandatory)][string]$Slug)
 
@@ -183,7 +189,7 @@ function Get-GateQueue {
     foreach ($tf in @(Get-ChildItem -Path $tasksDir -Filter 'task-*.md' -File -ErrorAction SilentlyContinue)) {
         $fm = Read-ControlPlaneFrontmatter -Path $tf.FullName
         if (-not $fm) { continue }
-        if ($fm.gate_decider -eq 'user') {
+        if ($fm.gate_decider -eq 'user' -and $fm.gate_state -eq 'pending') {
             $fm | Add-Member -NotePropertyName TaskFile -NotePropertyValue $tf.FullName -Force
             $null = $queue.Add($fm)
         }

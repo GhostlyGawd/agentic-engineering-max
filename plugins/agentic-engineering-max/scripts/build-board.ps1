@@ -12,7 +12,11 @@
 # Expected per-task frontmatter (YAML between --- fences at top of file):
 #   id: T-W1-001 | T-W2-007 | T-NNN
 #   title: <one-line title>
-#   status: open | in_progress | in_review | needs_fixing | escalated | done
+#   status: open | proposed | awaiting_user_approval | in_progress | in_review |
+#           needs_fixing | escalated | done | closed
+#   (proposed / awaiting_user_approval / closed are the control-plane gate
+#    statuses, mirrored from master-board.ps1: closed is terminal like done;
+#    proposed + awaiting_user_approval are gate-pending and keep the board active.)
 #   owner: <worker-id> | <reviewer-id> | (blank)
 #   claimed_at: <ISO 8601 UTC> | (blank)
 #   review_iterations: <int>            # defaults 0 if missing (per acceptance criteria)
@@ -183,12 +187,15 @@ function Format-ClaimedAge {
 
 # Collect tasks.
 $buckets = [ordered]@{
-    open         = New-Object System.Collections.ArrayList
-    in_progress  = New-Object System.Collections.ArrayList
-    in_review    = New-Object System.Collections.ArrayList
-    needs_fixing = New-Object System.Collections.ArrayList
-    escalated    = New-Object System.Collections.ArrayList
-    done         = New-Object System.Collections.ArrayList
+    open                   = New-Object System.Collections.ArrayList
+    proposed               = New-Object System.Collections.ArrayList
+    awaiting_user_approval = New-Object System.Collections.ArrayList
+    in_progress            = New-Object System.Collections.ArrayList
+    in_review              = New-Object System.Collections.ArrayList
+    needs_fixing           = New-Object System.Collections.ArrayList
+    escalated              = New-Object System.Collections.ArrayList
+    done                   = New-Object System.Collections.ArrayList
+    closed                 = New-Object System.Collections.ArrayList
 }
 $tasksById = @{}
 
@@ -277,6 +284,18 @@ Add-Section -Out $lines -Name 'open' -Items $buckets.open -Formatter {
     ('  {0,-12} {1,-50} {2}' -f $t.id, $t.title, $dep).TrimEnd()
 }
 
+Add-Section -Out $lines -Name 'proposed' -Items $buckets.proposed -Formatter {
+    param($t)
+    $gate = if ($t.gate_action) { '(gate: ' + $t.gate_action + ')' } else { '' }
+    ('  {0,-12} {1,-50} {2}' -f $t.id, $t.title, $gate).TrimEnd()
+}
+
+Add-Section -Out $lines -Name 'awaiting_user_approval' -Items $buckets.awaiting_user_approval -Formatter {
+    param($t)
+    $gate = if ($t.gate_action) { '(gate: ' + $t.gate_action + ')' } else { '' }
+    ('  {0,-12} {1,-50} {2}' -f $t.id, $t.title, $gate).TrimEnd()
+}
+
 Add-Section -Out $lines -Name 'in_progress' -Items $buckets.in_progress -Formatter {
     param($t)
     $age = Format-ClaimedAge -Iso $t.claimed_at -Now $nowUtc
@@ -307,6 +326,15 @@ Add-Section -Out $lines -Name 'done' -Items $buckets.done -Formatter {
     ('  {0,-12} {1,-50} {2}' -f $t.id, $t.title, $t.owner).TrimEnd()
 }
 
+# Terminal like done, but reached via a gate decline/abandon (control-plane
+# D-S6). Rendered as its own section so a closed finding never masquerades as
+# an open task, and excluded from activeCount so it does not block ALL TASKS DONE.
+Add-Section -Out $lines -Name 'closed' -Items $buckets.closed -Formatter {
+    param($t)
+    $why = if ($t.gate_state) { '(gate_state: ' + $t.gate_state + ')' } else { '' }
+    ('  {0,-12} {1,-50} {2}' -f $t.id, $t.title, $why).TrimEnd()
+}
+
 # Blocked = informational subset of open whose depends_on names a task that
 # exists in tasksById but is not in 'done'. We render after the done section.
 $blockedRows = New-Object System.Collections.ArrayList
@@ -335,13 +363,19 @@ $null = $lines.Add('')
 
 # All-done sentinel: emit when there is at least one done task and nothing
 # actively in the pipeline.
+# Active = anything not yet terminal. proposed + awaiting_user_approval are
+# gate-pending (awaiting a human decision) so they keep the board active and
+# block ALL TASKS DONE; closed is terminal (counts with done, not active).
 $activeCount =
     @($buckets.open).Count +
+    @($buckets.proposed).Count +
+    @($buckets.awaiting_user_approval).Count +
     @($buckets.in_progress).Count +
     @($buckets.in_review).Count +
     @($buckets.needs_fixing).Count +
     @($buckets.escalated).Count
-if ($activeCount -eq 0 -and @($buckets.done).Count -gt 0) {
+$terminalCount = @($buckets.done).Count + @($buckets.closed).Count
+if ($activeCount -eq 0 -and $terminalCount -gt 0) {
     $null = $lines.Add('*** ALL TASKS DONE')
     $null = $lines.Add('')
 }
